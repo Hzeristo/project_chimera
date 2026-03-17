@@ -1,0 +1,93 @@
+:root {
+  color-scheme: dark;
+  font-family: "Fira Code", "JetBrains Mono", "Cascadia Mono", "Consolas", monospace;
+  --astrocyte-neural-purple: #bb9af7;
+  --astrocyte-neural-purple-dim: rgba(187, 154, 247, 0.35);
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(15, 15, 20, 0.8);
+  color: #bb9af7;
+}
+
+body {
+  overflow: hidden;
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(187, 154, 247, 0.35) rgba(0, 0, 0, 0.25);
+}
+
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+*::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.25);
+}
+
+*::-webkit-scrollbar-thumb {
+  background: rgba(187, 154, 247, 0.35);
+  border: 1px solid rgba(51, 51, 51, 0.9);
+}
+
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus {
+  -webkit-text-fill-color: #bb9af7;
+  transition: background-color 9999s ease-out 0s;
+}
+
+/* Global styles for markdown rendered via {@html}. */
+.hud-output .msg-content p {
+  margin: 0.2em 0;
+}
+
+.hud-output .msg-content code {
+  background: rgba(187, 154, 247, 0.15);
+  color: #d3b8ff;
+  border-radius: 3px;
+  padding: 0.08em 0.3em;
+}
+
+.hud-output .msg-content pre {
+  margin: 0.4em 0;
+  padding: 10px 12px;
+  background: #050505;
+  border-radius: 6px;
+  overflow-x: auto;
+  border: 1px solid rgba(187, 154, 247, 0.2);
+}
+
+.hud-output .msg-content pre code {
+  display: block;
+  background: transparent;
+  color: inherit;
+  border-radius: 0;
+  padding: 0;
+}
+
+.hud-output .msg-content .katex {
+  color: inherit;
+  text-shadow: 0 0 10px rgba(229, 208, 255, 0.22);
+}
+
+.hud-output .msg-content .katex .mord,
+.hud-output .msg-content .katex .mbin,
+.hud-output .msg-content .katex .mrel {
+  color: #e5d0ff;
+}
+
+.hud-output .msg-content .katex-display {
+  margin: 0.45em 0;
+  padding: 0.18em 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
