@@ -1,5 +1,4 @@
 use futures_util::StreamExt;
-use log::{debug, info};
 use regex::Regex;
 use serde::Serialize;
 use tauri::{AppHandle, Emitter};
@@ -115,12 +114,6 @@ fn phase_one_fragment_step(
 
     // 保留参数以兼容调用签名；新的阶段一策略不再进入“永久旁路”。
     *bypass_mode = false;
-    debug!(
-        "[Step In] Fragment: {:?}, Bypass: {}, Buf Len: {}",
-        fragment,
-        *bypass_mode,
-        intercept_buffer.len()
-    );
 
     intercept_buffer.push_str(fragment);
 
@@ -130,7 +123,6 @@ fn phase_one_fragment_step(
             .map(|m| m.as_str().trim().to_string())
             .filter(|s| !s.is_empty());
         if let Some(keyword) = extracted {
-            debug!("🚨 [Regex HIT] Extracted keyword: {}", keyword);
             return Ok(Some(keyword));
         }
     }
@@ -163,23 +155,11 @@ fn phase_one_fragment_step(
     }
 
     let to_emit = intercept_buffer[..releasable_len].to_string();
-    let broken_by_newline = to_emit.contains('\n');
-    let too_long_without_closure = false;
-    if broken_by_newline || too_long_without_closure {
-        debug!(
-            "💥 [Abort Suspect] Buffer aborted. Newline: {}, TooLong: {}. Dumping buffer: {:?}",
-            broken_by_newline,
-            too_long_without_closure,
-            intercept_buffer
-        );
-    }
-    let trimmed_buf = to_emit.trim_start();
-    debug!(
-        "➡️ [Normal Talk] Triggered normal release. Length: {}. Emitting buffer: {:?}",
-        trimmed_buf.chars().count(),
-        intercept_buffer
-    );
-    debug!("[Bypass Emit] Emitting chunk: {:?}", to_emit);
+    // let broken_by_newline = to_emit.contains('\n');
+    // let too_long_without_closure = false;
+    // if broken_by_newline || too_long_without_closure {
+    // }
+    // let trimmed_buf = to_emit.trim_start();
     intercept_buffer.drain(..releasable_len);
     full_response_text.push_str(&to_emit);
     app.emit("bb-stream-chunk", to_emit)
@@ -258,12 +238,8 @@ pub async fn stream_llm_response(
     }
 
     if let Some(keyword) = extracted_keyword {
-        info!("[Astrocyte] step 1: extracted_keyword = {:?}", keyword);
+
         let tool_result = tools::delegate_search_vault(&keyword).await;
-        info!(
-            "[Astrocyte] step 2: delegate_search_vault returned (len={})",
-            tool_result.len()
-        );
 
         let mut reroll_messages = messages
             .iter()
@@ -285,13 +261,8 @@ pub async fn stream_llm_response(
             ),
         });
 
-        if let Ok(json) = serde_json::to_string_pretty(&reroll_messages) {
-            info!("[Astrocyte] reroll_messages:\n{}", json);
-        }
-        info!("[Astrocyte] step 3: sending reroll request to provider");
         let second_response =
             request_openai_compatible_completion(&client, &provider, reroll_messages).await?;
-        info!("[Astrocyte] step 4: second_response received, starting stream");
         let mut second_stream = second_response.bytes_stream();
         let mut second_carry = String::new();
         let mut rerolled_full_response = String::new();
@@ -313,16 +284,8 @@ pub async fn stream_llm_response(
             }
         }
 
-        info!(
-            "[Astrocyte] step 5: main stream loop ended, rerolled_full_response len={}",
-            rerolled_full_response.len()
-        );
         let second_tail = second_carry.trim();
         if !second_tail.is_empty() {
-            info!(
-                "[Astrocyte] step 6: processing second_tail (len={})",
-                second_tail.len()
-            );
             if let Some(fragment) = extract_fragment_from_sse_line(second_tail)? {
                 rerolled_full_response.push_str(&fragment);
                 app_handle
@@ -331,18 +294,6 @@ pub async fn stream_llm_response(
             }
         }
 
-        let preview: String = rerolled_full_response.chars().take(2000).collect();
-        let suffix = if rerolled_full_response.chars().count() > 2000 {
-            "..."
-        } else {
-            ""
-        };
-        info!(
-            "[Astrocyte] step 7: second DS response (len={}):\n{}{}",
-            rerolled_full_response.len(),
-            preview,
-            suffix
-        );
         return Ok(rerolled_full_response);
     }
 

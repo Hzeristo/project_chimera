@@ -1,7 +1,10 @@
 use arboard::Clipboard;
 use chrono::{SecondsFormat, Utc};
 use log::{debug, warn};
-use memory::{append_entries, get_entries_for_session, get_session_summaries, ChatEntry, SessionSummary};
+use memory::{
+    append_session_entries, delete_entry, delete_session_file, get_entries_for_session,
+    get_timeline_summaries, save_session_entries, ChatEntry, SessionSummary,
+};
 use reqwest::header::AUTHORIZATION;
 use std::time::Duration;
 use tauri::{Emitter, Manager};
@@ -15,8 +18,21 @@ mod settings;
 mod state;
 mod tools;
 use persona::{PersonaConfig, PersonaSnapshot};
+use serde::Deserialize;
 use settings::{save_astrocyte_config, AstrocyteConfig, ProviderConfig};
 use state::{AstrocyteState, Message};
+
+/// Payload for syncing session history with persistence (includes ids for delete/edit).
+#[derive(Deserialize)]
+struct SyncEntry {
+    id: String,
+    role: String,
+    content: String,
+    #[serde(default)]
+    timestamp: Option<String>, 
+    #[serde(default)]
+    persona: Option<String>,
+}
 
 // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
 #[tauri::command]
@@ -246,11 +262,40 @@ async fn ping_provider(base_url: String, api_key: String) -> bool {
 #[tauri::command]
 async fn sync_session_history(
     session_id: String,
-    messages: Vec<Message>,
+    entries: Vec<SyncEntry>,
     state: tauri::State<'_, AstrocyteState>,
 ) -> Result<(), String> {
     let normalized_session_id = normalize_session_id(Some(session_id));
     state.create_session(normalized_session_id.clone()).await;
+
+    let chat_entries: Vec<ChatEntry> = entries
+        .into_iter()
+        .map(|e| ChatEntry {
+            id: e.id,
+            timestamp: e.timestamp.unwrap_or_else(now_timestamp),
+            role: e.role,
+            content: e.content,
+            session_id: normalized_session_id.clone(),
+            persona: e.persona,
+        })
+        .collect();
+
+    let messages: Vec<Message> = chat_entries
+        .iter()
+        .map(|e| Message {
+            role: e.role.clone(),
+            content: e.content.clone(),
+        })
+        .collect();
+
+    tauri::async_runtime::spawn_blocking({
+        let sid = normalized_session_id.clone();
+        let entries = chat_entries.clone();
+        move || save_session_entries(&sid, &entries)
+    })
+    .await
+    .map_err(|e| format!("sync task join failed: {}", e))??;
+
     state
         .set_history_for_session(&normalized_session_id, messages)
         .await?;
@@ -267,9 +312,15 @@ fn normalize_session_id(raw: Option<String>) -> String {
         .unwrap_or_else(|| "default_session".to_string())
 }
 
-fn build_entry(role: &str, content: String, persona: Option<&str>, session_id: &str) -> ChatEntry {
+fn build_entry(
+    id: String,
+    role: &str,
+    content: String,
+    persona: Option<&str>,
+    session_id: &str,
+) -> ChatEntry {
     ChatEntry {
-        id: Uuid::new_v4().to_string(),
+        id,
         timestamp: now_timestamp(),
         role: role.to_string(),
         content,
@@ -278,9 +329,12 @@ fn build_entry(role: &str, content: String, persona: Option<&str>, session_id: &
     }
 }
 
-fn persist_chat_entries_non_blocking(entries: Vec<ChatEntry>) {
+fn persist_chat_entries_non_blocking(session_id: String, entries: Vec<ChatEntry>) {
     tauri::async_runtime::spawn(async move {
-        let write_result = tauri::async_runtime::spawn_blocking(move || append_entries(&entries)).await;
+        let write_result = tauri::async_runtime::spawn_blocking(move || {
+            append_session_entries(&session_id, &entries)
+        })
+        .await;
         match write_result {
             Ok(Ok(())) => {}
             Ok(Err(e)) => eprintln!("[astrocyte] memory append failed: {}", e),
@@ -289,6 +343,8 @@ fn persist_chat_entries_non_blocking(entries: Vec<ChatEntry>) {
     });
 }
 
+/// 三明治组装法：首部=当前 Persona System Prompt，中部=Session 历史，尾部=Injection Prompt (Author's Note)。
+/// 彻底修复「切换 Persona 只在开头生效」的 bug，避免长文本带来的大模型遗忘症。
 async fn build_session_messages(
     state: &AstrocyteState,
     session_id: &str,
@@ -296,20 +352,27 @@ async fn build_session_messages(
     let history = state.get_history(session_id).await.unwrap_or_default();
     let active_persona = state.active_persona.read().await.clone();
 
-    let mut messages = Vec::with_capacity(history.len() + 2);
+    let mut messages = Vec::with_capacity(history.len() + 3);
+
+    // 1. 首部：强制读取全局 State 中当前激活的 Persona 的 System Prompt
     messages.push(Message {
         role: "system".to_string(),
         content: active_persona.system_prompt,
     });
+
+    // 2. 中部：Session 历史（User / Assistant 交互）
+    messages.extend(history);
+
+    // 3. 尾部：隐形 Injection Prompt（Author's Note / 最后通牒），紧随最后一条 User 之后
     if let Some(note) = active_persona.authors_note {
         if !note.trim().is_empty() {
             messages.push(Message {
                 role: "system".to_string(),
-                content: format!("[AUTHOR_NOTE]: {}", note),
+                content: format!("[AUTHOR_NOTE / 最后通牒]: {}", note),
             });
         }
     }
-    messages.extend(history);
+
     Ok(messages)
 }
 
@@ -317,6 +380,8 @@ async fn build_session_messages(
 async fn evaluate_payload(
     payload: String,
     session_id: Option<String>,
+    user_message_id: Option<String>,
+    assistant_message_id: Option<String>,
     state: tauri::State<'_, AstrocyteState>,
     app: tauri::AppHandle,
 ) -> Result<(), String> {
@@ -368,11 +433,19 @@ async fn evaluate_payload(
             warn!("[astrocyte] append assistant message to state failed: {}", e);
         }
 
+        let user_id = user_message_id.unwrap_or_else(|| Uuid::new_v4().to_string());
+        let assistant_id = assistant_message_id.unwrap_or_else(|| Uuid::new_v4().to_string());
         let entries = vec![
-            build_entry("user", user_input, None, &session_id),
-            build_entry("bb", model_reply, Some(&active_persona_id), &session_id),
+            build_entry(user_id, "user", user_input, None, &session_id),
+            build_entry(
+                assistant_id,
+                "bb",
+                model_reply,
+                Some(&active_persona_id),
+                &session_id,
+            ),
         ];
-        persist_chat_entries_non_blocking(entries);
+        persist_chat_entries_non_blocking(session_id.clone(), entries);
 
         if let Err(e) = app_handle.emit("bb-stream-done", "DONE") {
             warn!("[astrocyte] emit bb-stream-done failed: {}", e);
@@ -383,12 +456,82 @@ async fn evaluate_payload(
 }
 
 #[tauri::command]
+async fn delete_session_history(
+    session_id: String,
+    state: tauri::State<'_, AstrocyteState>,
+) -> Result<(), String> {
+    let sid = normalize_session_id(Some(session_id));
+
+    tauri::async_runtime::spawn_blocking({
+        let s = sid.clone();
+        move || delete_session_file(&s)
+    })
+    .await
+    .map_err(|e| format!("delete session file task join failed: {}", e))??;
+
+    state.remove_session(&sid).await;
+    Ok(())
+}
+
+#[tauri::command]
 async fn get_session_history() -> Result<Vec<SessionSummary>, String> {
-    let result = tauri::async_runtime::spawn_blocking(get_session_summaries)
+    let result = tauri::async_runtime::spawn_blocking(get_timeline_summaries)
         .await
         .map_err(|e| format!("failed to join session summary task: {}", e))?;
     result
 }
+
+#[tauri::command]
+async fn delete_chat_message(
+    session_id: String,
+    msg_id: String,
+    state: tauri::State<'_, AstrocyteState>,
+) -> Result<(), String> {
+    let sid = normalize_session_id(Some(session_id));
+    let mid = msg_id.trim();
+    if mid.is_empty() {
+        return Err("msg_id is empty".to_string());
+    }
+
+    let session_file = memory::get_session_file_path(&sid)
+        .map_err(|e| format!("session path failed: {}", e))?;
+
+    // 仅当 session 文件存在时才执行删除，避免未持久化会话产生空文件
+    if !session_file.exists() {
+        return Ok(());
+    }
+
+    tauri::async_runtime::spawn_blocking({
+        let s = sid.clone();
+        let m = mid.to_string();
+        move || delete_entry(&s, &m)
+    })
+    .await
+    .map_err(|e| format!("delete task join failed: {}", e))??;
+
+    {
+        let entries = tauri::async_runtime::spawn_blocking({
+            let s = sid.clone();
+            move || get_entries_for_session(&s)
+        })
+        .await
+        .map_err(|e| format!("load entries task join failed: {}", e))??;
+
+        let messages: Vec<Message> = entries
+            .iter()
+            .map(|e| Message {
+                role: e.role.clone(),
+                content: e.content.clone(),
+            })
+            .collect();
+
+        state.create_session(sid.clone()).await;
+        state.set_history_for_session(&sid, messages).await?;
+    }
+
+    Ok(())
+}
+
 
 #[tauri::command]
 async fn load_session_archive(
@@ -431,6 +574,9 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .setup(|app| {
+            if let Err(e) = memory::ensure_migration() {
+                eprintln!("[astrocyte] legacy memory migration failed (non-fatal): {}", e);
+            }
             // 注册全局快捷键 CommandOrControl+Space，失败时仅打印警告，不阻塞启动
             if let Err(e) = app.global_shortcut().on_shortcut(
                 "CommandOrControl+Space",
@@ -533,7 +679,9 @@ pub fn run() {
             ping_provider,
             sync_session_history,
             get_session_history,
-            load_session_archive
+            load_session_archive,
+            delete_chat_message,
+            delete_session_history
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

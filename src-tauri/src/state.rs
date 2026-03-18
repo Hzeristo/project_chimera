@@ -75,4 +75,9 @@ impl AstrocyteState {
         session.history = history;
         Ok(())
     }
+
+    pub async fn remove_session(&self, session_id: &str) {
+        let mut sessions = self.sessions.write().await;
+        sessions.remove(session_id);
+    }
 }

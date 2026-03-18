@@ -56,6 +56,10 @@
     persona?: string | null;
     session_id: string;
   };
+  type TimelineNode = {
+    session: SessionSummary;
+    gap: number;
+  };
 
   const DEFAULT_PERSONA = 'bb';
   const makeId = () =>
@@ -74,7 +78,9 @@
   let history: HistoryEntry[] = [makeBootEntry()];
   let activeSessionId = makeSessionId();
   let sessionSummaries: SessionSummary[] = [];
+  let history_sessions: TimelineNode[] = [];
   let viewingArchive: SessionSummary | null = null;
+  let isTimelineOpen = false;
   let inputSignal = '';
   let inputEl: HTMLTextAreaElement | null = null;
   let outputEl: HTMLElement | null = null;
@@ -124,6 +130,7 @@
   $: archiveBannerText = viewingArchive
     ? `[VIEWING HISTORICAL ARCHIVE: ${viewingArchive.id} @ ${formatSessionTimestamp(viewingArchive.timestamp)}]`
     : '';
+  $: history_sessions = buildTimelineNodes(sessionSummaries);
 
   $: selectedProviderPingState = selectedProviderId
     ? (pingByProviderId[selectedProviderId] ?? 'idle')
@@ -203,17 +210,51 @@
       }));
   }
 
+  function toSyncEntries(entries: HistoryEntry[]): Array<{ id: string; role: string; content: string; timestamp: string; persona?: string }> {
+    return entries
+      .filter((entry) => (entry.sender === 'user' || entry.sender === 'bb') && !entry.isLoading)
+      .map((entry) => ({
+        id: entry.id,
+        role: entry.sender === 'user' ? 'user' : 'assistant',
+        content: entry.text,
+        timestamp: entry.timestamp,
+        persona: entry.persona,
+      }));
+  }
+
   function formatSessionTimestamp(timestamp: string): string {
     const parsed = new Date(timestamp);
     if (Number.isNaN(parsed.getTime())) return timestamp;
     return parsed.toLocaleString();
   }
 
-  function dotTopPercent(index: number, total: number): number {
-    if (total <= 1) return 10;
-    const top = 10;
-    const bottom = 14;
-    return top + (index * (100 - top - bottom)) / (total - 1);
+  function getTimestampMs(timestamp: string): number {
+    const parsedMs = Date.parse(timestamp);
+    return Number.isFinite(parsedMs) ? parsedMs : 0;
+  }
+
+  function getTemporalGapPx(deltaMs: number): number {
+    if (deltaMs <= 0) return 14;
+    const minute = 60_000;
+    const normalized = deltaMs / minute;
+    const logarithmic = Math.log1p(normalized) * 9;
+    return Math.max(10, Math.min(88, Math.round(logarithmic)));
+  }
+
+  function buildTimelineNodes(summaries: SessionSummary[]): TimelineNode[] {
+    if (!summaries.length) return [];
+    const ordered = [...summaries].sort(
+      (a, b) => getTimestampMs(a.timestamp) - getTimestampMs(b.timestamp)
+    );
+    return ordered.map((session, index) => {
+      if (index === 0) {
+        return { session, gap: 0 };
+      }
+      const deltaMs = Math.abs(
+        getTimestampMs(session.timestamp) - getTimestampMs(ordered[index - 1].timestamp)
+      );
+      return { session, gap: getTemporalGapPx(deltaMs) };
+    });
   }
 
   function mapRoleToSender(role: string): Sender {
@@ -273,9 +314,42 @@
     await refreshSessionHistory();
   }
 
+  function calculateGap(session: TimelineNode): number {
+    return session.gap;
+  }
+
+  async function loadSession(sessionId: string) {
+    const summary = sessionSummaries.find((item) => item.id === sessionId);
+    if (!summary) return;
+    await loadSessionArchive(summary);
+  }
+
+  async function deleteSession(sessionId: string, e: MouseEvent) {
+    e.stopPropagation();
+    e.preventDefault();
+    try {
+      await invoke('delete_session_history', { sessionId });
+      sessionSummaries = sessionSummaries.filter((s) => s.id !== sessionId);
+      if (activeSessionId === sessionId) {
+        clearTransientState();
+        history = [];
+        activeSessionId = makeSessionId();
+        viewingArchive = null;
+        markdownCache.clear();
+      }
+    } catch (err) {
+      const msg = typeof err === 'string' ? err : 'failed to delete session';
+      notifySystem(`[SESSION_DELETE_ERROR] ${msg}`);
+    }
+  }
+
+  async function startNewSignal() {
+    await resetToNewSignal();
+  }
+
   async function syncTimelineToBackend() {
-    const messages = toBackendHistory(history);
-    await invoke('sync_session_history', { sessionId: activeSessionId, messages });
+    const entries = toSyncEntries(history);
+    await invoke('sync_session_history', { sessionId: activeSessionId, entries });
   }
 
   function resetDraft() {
@@ -623,16 +697,17 @@
 
   async function deleteMessage(msg: HistoryEntry) {
     if (msg.isLoading) return;
-    history = history.filter((entry) => entry.id !== msg.id);
-    if (currentBBMessageId === msg.id) {
-      currentBBMessageId = null;
-      isStreaming = false;
-    }
     try {
+      await invoke('delete_chat_message', { sessionId: activeSessionId, msgId: msg.id });
+      history = history.filter((entry) => entry.id !== msg.id);
+      if (currentBBMessageId === msg.id) {
+        currentBBMessageId = null;
+        isStreaming = false;
+      }
       await syncTimelineToBackend();
     } catch (error) {
-      const errText = typeof error === 'string' ? error : 'failed to sync deleted message';
-      notifySystem(`[TIMELINE_SYNC_ERROR] ${errText}`);
+      const errText = typeof error === 'string' ? error : 'failed to delete message';
+      notifySystem(`[DELETE_ERROR] ${errText}`);
     }
   }
 
@@ -641,6 +716,7 @@
     const normalized = message.trim();
     if (!normalized) return;
 
+    let userMsgId: string;
     if (appendUser) {
       const userEntry: HistoryEntry = {
         id: makeId(),
@@ -650,6 +726,10 @@
         persona: personaSnapshot.active_persona_id || DEFAULT_PERSONA,
       };
       history = [...history, userEntry];
+      userMsgId = userEntry.id;
+    } else {
+      const lastUser = history.filter((m) => m.sender === 'user').pop();
+      userMsgId = lastUser?.id ?? makeId();
     }
 
     const loadingId = makeId();
@@ -669,7 +749,12 @@
     await scrollToBottom();
 
     try {
-      await invoke('evaluate_payload', { payload: normalized, sessionId: activeSessionId });
+      await invoke('evaluate_payload', {
+        payload: normalized,
+        sessionId: activeSessionId,
+        userMessageId: userMsgId,
+        assistantMessageId: loadingId,
+      });
     } catch (error) {
       const errText = typeof error === 'string' ? error : 'Unknown gateway failure';
       history = history.map((msg) =>
@@ -854,31 +939,6 @@
 </script>
 
 <main class="hud-shell">
-  <aside class="neural-timeline" aria-label="The Neural Timeline">
-    <div class="timeline-track">
-      <svg class="timeline-coreline" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
-        <line x1="50" y1="3" x2="50" y2="97"></line>
-      </svg>
-      {#each sessionSummaries as session, index (session.id)}
-        <button
-          class="timeline-dot-wrap"
-          data-active={activeSessionId === session.id ? 'true' : 'false'}
-          type="button"
-          style={`top: ${dotTopPercent(index, sessionSummaries.length)}%;`}
-          on:click={() => loadSessionArchive(session)}
-          aria-label={`Load archive ${session.id}`}
-        >
-          <span class="timeline-dot"></span>
-          <span class="ghost-tooltip">
-            <strong>{formatSessionTimestamp(session.timestamp)}</strong>
-            <span>{session.first_user_message_snippet || '[NO_USER_MESSAGE]'}</span>
-          </span>
-        </button>
-      {/each}
-    </div>
-    <button class="new-signal-trigger" type="button" on:click={resetToNewSignal}>[+] NEW SIGNAL</button>
-  </aside>
-
   <div class="hud-main">
     <header class="hud-header" data-tauri-drag-region>
       <span>[ BB_CHANNEL :: ASTROCYTE GATEWAY ]</span>
@@ -887,12 +947,53 @@
       </button>
     </header>
 
-    {#if viewingArchive}
-      <div class="archive-banner">{archiveBannerText}</div>
-    {/if}
+    <div class="middle-arena">
+      {#if !showSettingsPanel}
+        <div
+          class="timeline-wrapper"
+          class:open={isTimelineOpen}
+          role="complementary"
+          aria-label="Neural timeline drawer"
+          on:mouseenter={() => (isTimelineOpen = true)}
+          on:mouseleave={() => (isTimelineOpen = false)}
+        >
+          <div class="timeline-laser"></div>
+          <div class="timeline-scroll">
+            {#each history_sessions as session (session.session.id)}
+              <div
+                class="timeline-node"
+                style="margin-top: {calculateGap(session)}px;"
+                on:click={() => loadSession(session.session.id)}
+                on:keydown={(e) => (e.key === 'Enter') && loadSession(session.session.id)}
+                role="button"
+                tabindex="0"
+              >
+                <div class="dot"></div>
+                <div class="tooltip">
+                  <span class="time">{formatSessionTimestamp(session.session.timestamp)}</span>
+                  <span class="snippet">{session.session.first_user_message_snippet || '[NO_USER_MESSAGE]'}</span>
+                  <button
+                    class="tooltip-delete"
+                    type="button"
+                    title="Delete session"
+                    on:click={(e) => deleteSession(session.session.id, e)}
+                  >X</button>
+                </div>
+              </div>
+            {/each}
+          </div>
+          <button class="timeline-btn" on:click={startNewSignal}>
+            <span class="icon">[+]</span>
+            <span class="label">NEW SIGNAL</span>
+          </button>
+        </div>
+      {/if}
 
-    <section class="hud-output" aria-label="output" bind:this={outputEl}>
-      {#each history as msg (msg.id)}
+      <section class="hud-output" aria-label="output" bind:this={outputEl}>
+        {#if viewingArchive}
+          <div class="archive-banner">{archiveBannerText}</div>
+        {/if}
+        {#each history as msg (msg.id)}
         <article class="msg-row" data-sender={msg.sender}>
           {#if editingMessageId === msg.id}
             <textarea
@@ -909,36 +1010,15 @@
           {/if}
           {#if msg.sender !== 'system'}
             <div class="msg-actions" aria-label="assistant message actions">
-              <button
-                class="msg-action"
-                type="button"
-                title="Edit"
-                on:click={() => onAiAction('edit', msg)}
-              >
-                E
-              </button>
-              <button
-                class="msg-action"
-                type="button"
-                title="Delete"
-                on:click={() => onAiAction('delete', msg)}
-              >
-                D
-              </button>
-              <button
-                class="msg-action"
-                type="button"
-                title="Retry"
-                disabled={msg.sender !== 'bb' || msg.isLoading || isStreaming}
-                on:click={() => onAiAction('retry', msg)}
-              >
-                R
-              </button>
+              <button class="msg-action" type="button" title="Edit" on:click={() => onAiAction('edit', msg)}>E</button>
+              <button class="msg-action" type="button" title="Delete" on:click={() => onAiAction('delete', msg)}>D</button>
+              <button class="msg-action" type="button" title="Retry" disabled={msg.sender !== 'bb' || msg.isLoading || isStreaming} on:click={() => onAiAction('retry', msg)}>R</button>
             </div>
           {/if}
         </article>
       {/each}
-    </section>
+      </section>
+    </div>
 
     <form class="hud-input-wrap" on:submit={submitInput}>
       <div class="persona-quick-switch">
@@ -968,6 +1048,7 @@
     </form>
   </div>
 
+  <!-- 设置面板遮罩... 保持原有代码不变 -->
   {#if showSettingsPanel}
     <div
       class="settings-overlay"
@@ -1145,15 +1226,15 @@
               />
 
               <label for="persona-note-input">Author's Note (Optional)</label>
-              <input
+              <textarea
                 id="persona-note-input"
-                class="settings-input"
-                type="text"
+                class="settings-input persona-note-input"
                 bind:value={personaDraft.authors_note}
                 placeholder="Optional tactical steering note"
                 autocomplete="off"
                 spellcheck="false"
-              />
+                rows="3"
+              ></textarea>
 
               <label for="persona-prompt-input">System Prompt</label>
               <textarea
@@ -1192,143 +1273,251 @@
   {/if}
 </main>
 
+
 <style>
   .hud-shell {
     width: 100vw;
     height: 100vh;
+    position: relative;
     display: flex;
-    flex-direction: row;
+    flex-direction: column;
     background: #0a0a0f;
     color: #bb9af7;
   }
 
   .hud-main {
-    flex: 1;
-    min-width: 0;
-    display: flex;
-    flex-direction: column;
-  }
-
-  .neural-timeline {
-    width: 72px;
-    border-right: 1px solid rgba(187, 154, 247, 0.2);
-    background: linear-gradient(180deg, rgba(5, 5, 9, 0.96), rgba(2, 2, 6, 0.96));
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    padding: 10px 0 12px;
-    box-sizing: border-box;
-    -webkit-app-region: no-drag;
-  }
-
-  .timeline-track {
     position: relative;
-    width: 100%;
     flex: 1;
-  }
-
-  .timeline-coreline {
-    position: absolute;
-    left: 0;
-    top: 0;
     width: 100%;
     height: 100%;
-    pointer-events: none;
+    display: flex;
+    flex-direction: column;
   }
 
-  .timeline-coreline line {
-    stroke: rgba(187, 154, 247, 0.35);
-    stroke-width: 0.8;
+  .middle-arena {
+    position: relative;
+    z-index: 20;
+    flex: 1;
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
   }
 
-  .timeline-dot-wrap {
+  .timeline-wrapper {
     position: absolute;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    width: 16px;
-    height: 16px;
-    border: none;
-    background: transparent;
-    padding: 0;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    width: 36px;
+    background: rgba(0, 0, 0, 0);
+    z-index: 100;
+    transition: width 0.3s cubic-bezier(0.16, 1, 0.3, 1), background 0.3s;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .timeline-wrapper.open {
+    width: 340px;
+    background: rgba(8, 8, 12, 0.95);
+    border-right: 1px solid rgba(187, 154, 247, 0.2);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    box-shadow: 10px 0 30px rgba(0, 0, 0, 0.7);
+  }
+
+  .timeline-laser {
+    position: absolute;
+    left: 17px;
+    top: 0;
+    bottom: 48px;
+    width: 2px;
+    z-index: 1;
+    background: linear-gradient(
+      180deg,
+      rgba(187, 154, 247, 0.1) 0%,
+      rgba(211, 184, 255, 0.9) 50%,
+      rgba(187, 154, 247, 0.1) 100%
+    );
+    background-size: 100% 200%;
+    box-shadow:
+      0 0 6px rgba(187, 154, 247, 0.5),
+      0 0 12px rgba(150, 100, 255, 0.3),
+      0 0 25px rgba(120, 80, 200, 0.15);
+    animation: energyFlow 4s linear infinite;
+  }
+
+  @keyframes energyFlow {
+    0% {
+      background-position: 0% 0%;
+    }
+    100% {
+      background-position: 0% 200%;
+    }
+  }
+
+  .timeline-scroll {
+    flex: 1;
+    width: 100%;
+    overflow-y: auto;
+    overflow-x: hidden;
+    padding-top: 48px;
+    padding-bottom: 20px;
+    z-index: 2;
+    scrollbar-width: none;
+  }
+
+  .timeline-scroll::-webkit-scrollbar {
+    display: none;
+  }
+
+  .timeline-node {
+    position: relative;
+    min-height: 14px;
     cursor: pointer;
+    margin-bottom: 8px;
   }
 
-  .timeline-dot {
+  .dot {
     position: absolute;
-    inset: 4px;
-    border-radius: 50%;
-    background: rgba(187, 154, 247, 0.95);
-    box-shadow: 0 0 10px rgba(187, 154, 247, 0.7);
-    transition: transform 140ms ease, box-shadow 140ms ease, background-color 140ms ease;
-  }
-
-  .timeline-dot-wrap:hover .timeline-dot,
-  .timeline-dot-wrap[data-active='true'] .timeline-dot {
-    transform: scale(1.2);
-    box-shadow: 0 0 14px rgba(187, 154, 247, 0.95);
-    background: #d7c1ff;
-  }
-
-  .ghost-tooltip {
-    position: absolute;
-    left: 18px;
+    left: 13px;
     top: 50%;
     transform: translateY(-50%);
-    min-width: 180px;
-    max-width: 260px;
-    padding: 7px 8px;
-    border: 1px solid rgba(187, 154, 247, 0.42);
-    background: rgba(0, 0, 0, 0.94);
-    color: rgba(221, 202, 255, 0.96);
-    font-size: 10px;
-    line-height: 1.35;
-    text-align: left;
-    pointer-events: none;
+    width: 10px;
+    height: 10px;
+    background: #ffffff;
+    border-radius: 50%;
+    box-shadow: 0 0 8px #fff, 0 0 16px #bb9af7;
+    transition: transform 0.2s, background 0.2s;
+  }
+
+  .timeline-node:hover .dot {
+    background: #bb9af7;
+    transform: translateY(-50%) scale(1.6);
+    box-shadow: 0 0 15px #bb9af7, 0 0 30px #bb9af7;
+  }
+
+  .tooltip {
+    position: absolute;
+    left: 42px;
+    top: 50%;
+    transform: translateY(-50%) translateX(-10px);
+    width: 270px;
+    max-height: 150px;
+    padding: 10px;
+    border-radius: 6px;
+    background: rgba(12, 12, 16, 0.85);
+    border: 1px solid rgba(187, 154, 247, 0.3);
+    color: #a9b1d6;
     opacity: 0;
-    transition: opacity 180ms ease;
-    z-index: 12;
+    visibility: hidden;
+    transition: all 0.3s ease;
+    z-index: 100;
+    overflow-y: auto;
   }
 
-  .ghost-tooltip strong {
+  .timeline-scroll .timeline-node:first-child .tooltip {
+    top: 50%;
+    transform: translateY(0) translateX(-10px);
+  }
+
+  .timeline-wrapper.open .timeline-node:hover .tooltip {
+    opacity: 1;
+    visibility: visible;
+    transform: translateY(-50%) translateX(0);
+  }
+
+  .timeline-wrapper.open .timeline-scroll .timeline-node:first-child:hover .tooltip {
+    transform: translateY(0) translateX(0);
+  }
+
+  .tooltip .time {
     display: block;
-    margin-bottom: 3px;
-    font-weight: 500;
-    color: #f0e4ff;
+    font-size: 10px;
+    margin-bottom: 6px;
+    color: #d7c1ff;
+    font-weight: bold;
   }
 
-  .ghost-tooltip span {
-    display: block;
-    white-space: normal;
-    word-break: break-word;
-    opacity: 0.88;
+  .tooltip .snippet {
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 4;
+    line-clamp: 4;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-size: 12px;
+    color: #9aa2c7;
   }
 
-  .timeline-dot-wrap:hover .ghost-tooltip {
+  .tooltip-delete {
+    position: absolute;
+    top: 4px;
+    right: 4px;
+    padding: 2px 6px;
+    font-size: 10px;
+    font-weight: bold;
+    color: rgba(255, 255, 255, 0.4);
+    background: transparent;
+    border: none;
+    border-radius: 3px;
+    cursor: pointer;
+    transition: color 0.2s, background 0.2s;
+  }
+
+  .tooltip-delete:hover {
+    color: #ff6b6b;
+    background: rgba(255, 107, 107, 0.15);
+  }
+
+  .timeline-btn {
+    height: 48px;
+    display: flex;
+    align-items: center;
+    background: #000000;
+    border: none;
+    color: #bb9af7;
+    cursor: pointer;
+    overflow: hidden;
+    padding: 0;
+    transition: all 0.3s;
+    z-index: 5;
+    margin-top: auto;
+  }
+
+  .timeline-wrapper.open .timeline-btn {
+    background: rgba(5, 5, 8, 1);
+    border-top: 1px solid rgba(187, 154, 247, 0.2);
+  }
+
+  .timeline-wrapper.open .timeline-btn:hover {
+    background: rgba(15, 12, 22, 1);
+    border-top-color: rgba(187, 154, 247, 0.35);
+  }
+
+  .timeline-btn .icon {
+    width: 36px;
+    flex-shrink: 0;
+    text-align: center;
+    font-weight: bold;
+    font-size: 14px;
+  }
+
+  .timeline-btn .label {
+    font-size: 11px;
+    letter-spacing: 0.1em;
+    white-space: nowrap;
+    opacity: 0;
+    transition: opacity 0.2s;
+  }
+
+  .timeline-wrapper.open .timeline-btn .label {
     opacity: 1;
   }
 
-  .new-signal-trigger {
-    width: calc(100% - 14px);
-    margin-top: 6px;
-    border: 1px solid rgba(187, 154, 247, 0.45);
-    background: rgba(10, 10, 15, 0.9);
-    color: #bb9af7;
-    font: inherit;
-    font-size: 9px;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-    padding: 8px 6px;
-    cursor: pointer;
-    transition: border-color 120ms ease, box-shadow 120ms ease, color 120ms ease;
-  }
-
-  .new-signal-trigger:hover {
-    border-color: rgba(187, 154, 247, 0.9);
-    box-shadow: 0 0 10px rgba(187, 154, 247, 0.28);
-    color: #e2d2ff;
-  }
-
   .hud-header {
+    position: relative;
+    z-index: 10;
     height: 28px;
     display: flex;
     align-items: center;
@@ -1379,7 +1568,7 @@
   .hud-output {
     flex: 1;
     width: 100%;
-    padding: 14px 16px;
+    padding: 14px 16px 14px 40px;
     box-sizing: border-box;
     overflow-y: auto;
     background: #000000;
@@ -1747,6 +1936,17 @@
     resize: vertical;
     font-family: "Fira Code", "JetBrains Mono", "Cascadia Mono", "Consolas", monospace;
     line-height: 1.4;
+  }
+
+  .persona-note-input {
+    min-height: 60px;
+    resize: vertical;
+    border: none;
+    border-bottom: 1px solid rgba(187, 154, 247, 0.2);
+  }
+
+  .persona-note-input:focus {
+    border-bottom-color: rgba(187, 154, 247, 0.72);
   }
 
   .settings-hint {
