@@ -47,7 +47,8 @@ input:-webkit-autofill:focus {
 
 /* Global styles for markdown rendered via {@html}. */
 .hud-output .msg-content p {
-  margin: 0.2em 0;
+  margin-top: 0.25em;
+  margin-bottom: 1em;
 }
 
 .hud-output .msg-content code {
@@ -90,4 +91,124 @@ input:-webkit-autofill:focus {
   padding: 0.18em 0;
   overflow-x: auto;
   overflow-y: hidden;
+}
+
+/* Fire Selector: 双模火力选择器 */
+.header-right {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  -webkit-app-region: no-drag;
+}
+
+.fire-selector {
+  font: inherit;
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 4px 8px;
+  border: 1px solid rgba(187, 154, 247, 0.2);
+  background: transparent;
+  color: rgba(187, 154, 247, 0.28);
+  cursor: pointer;
+  -webkit-app-region: no-drag;
+  transition: color 0.2s ease, opacity 0.2s ease, text-shadow 0.2s ease, border-color 0.2s ease;
+}
+
+.fire-selector:hover {
+  color: rgba(187, 154, 247, 0.55);
+  border-color: rgba(187, 154, 247, 0.35);
+}
+
+.fire-selector.active {
+  color: #ffffff;
+  border-color: rgba(187, 154, 247, 0.5);
+  text-shadow:
+    0 0 8px rgba(255, 255, 255, 0.9),
+    0 0 14px rgba(187, 154, 247, 0.6),
+    0 0 22px rgba(150, 100, 255, 0.35);
+}
+
+.fire-selector.active:hover {
+  text-shadow:
+    0 0 10px rgba(255, 255, 255, 1),
+    0 0 18px rgba(187, 154, 247, 0.75),
+    0 0 28px rgba(150, 100, 255, 0.45);
+}
+
+/* System log: plain DOM, bypasses markdown — isolate from BB/user chunks */
+.system-log-raw {
+  display: block;
+  width: 100%;
+  margin-top: 1rem;
+  margin-bottom: 1rem;
+  padding: 8px;
+  background: rgba(20, 20, 25, 0.9);
+  border-left: 2px solid #bb9af7;
+  color: #888;
+  font-size: 0.85em;
+  font-family: monospace;
+  white-space: pre-wrap;
+  clear: both;
+}
+
+/* Emergency stop — visible only while generation is in flight */
+.signal-abort-btn {
+  flex-shrink: 0;
+  align-self: flex-end;
+  margin-bottom: 10px;
+  padding: 8px 12px;
+  border: 1px solid rgba(255, 51, 51, 0.55);
+  border-radius: 4px;
+  background: linear-gradient(180deg, rgba(40, 8, 8, 0.95), rgba(18, 4, 4, 0.98));
+  color: #ff3333;
+  font: inherit;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  cursor: pointer;
+  text-shadow:
+    0 0 6px rgba(255, 51, 51, 0.55),
+    0 0 14px rgba(255, 30, 30, 0.35);
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.4),
+    0 0 12px rgba(255, 51, 51, 0.18);
+  transition:
+    border-color 140ms ease,
+    color 140ms ease,
+    box-shadow 140ms ease,
+    text-shadow 140ms ease;
+}
+
+.signal-abort-btn:hover {
+  border-color: rgba(255, 80, 80, 0.95);
+  color: #ff5555;
+  box-shadow:
+    0 0 0 1px rgba(255, 51, 51, 0.25),
+    0 0 18px rgba(255, 51, 51, 0.42);
+  text-shadow:
+    0 0 8px rgba(255, 90, 90, 0.85),
+    0 0 20px rgba(255, 40, 40, 0.5);
+}
+
+.signal-abort-btn:active {
+  transform: translateY(1px);
+}
+
+/* Partial assistant text kept in UI after user abort — not written to JSONL */
+.hud-output article.msg-row[data-stream-aborted='true'] .msg-content {
+  opacity: 0.72;
+  text-decoration: line-through;
+  text-decoration-color: rgba(255, 51, 51, 0.45);
+}
+
+.hud-output article.msg-row[data-stream-aborted='true'] .msg-content::after {
+  content: ' // VOID_SNAPSHOT · NOT_PERSISTED';
+  display: block;
+  margin-top: 0.5em;
+  font-size: 0.72em;
+  letter-spacing: 0.06em;
+  color: rgba(255, 51, 51, 0.65);
+  text-decoration: none;
 }

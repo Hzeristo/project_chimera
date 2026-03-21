@@ -1,7 +1,7 @@
-use std::collections::HashMap;
-
 use serde::{Deserialize, Serialize};
 use tokio::sync::RwLock;
+
+use std::collections::HashMap;
 
 use crate::persona::{self, PersonaConfig};
 use crate::settings::{load_astrocyte_config, AstrocyteConfig};
@@ -21,6 +21,7 @@ pub struct AstrocyteState {
     pub sessions: RwLock<HashMap<String, Session>>,
     pub config: RwLock<AstrocyteConfig>,
     pub active_persona: RwLock<PersonaConfig>,
+    pub abort_token: tokio::sync::RwLock<Option<tokio_util::sync::CancellationToken>>,
 }
 
 impl AstrocyteState {
@@ -31,6 +32,7 @@ impl AstrocyteState {
             sessions: RwLock::new(HashMap::new()),
             config: RwLock::new(load_astrocyte_config()),
             active_persona: RwLock::new(active_persona),
+            abort_token: RwLock::new(None),
         }
     }
 

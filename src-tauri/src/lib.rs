@@ -9,6 +9,7 @@ use reqwest::header::AUTHORIZATION;
 use std::time::Duration;
 use tauri::{Emitter, Manager};
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, ShortcutState};
+use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
 
 mod llm_client;
@@ -16,7 +17,6 @@ mod memory;
 mod persona;
 mod settings;
 mod state;
-mod tools;
 use persona::{PersonaConfig, PersonaSnapshot};
 use serde::Deserialize;
 use settings::{save_astrocyte_config, AstrocyteConfig, ProviderConfig};
@@ -46,6 +46,16 @@ fn process_signal(payload: String) -> String {
         "[BB Intercepted]: 你的微弱脑电波已收到。你刚才说的是 -> {}",
         payload
     )
+}
+
+#[tauri::command]
+async fn abort_generation(state: tauri::State<'_, AstrocyteState>) -> Result<(), String> {
+    let mut guard = state.abort_token.write().await;
+    if let Some(token) = guard.as_ref() {
+        token.cancel();
+    }
+    *guard = None;
+    Ok(())
 }
 
 #[tauri::command]
@@ -125,6 +135,34 @@ async fn set_active_provider(
     }
     config.active_provider_id = Some(provider_id.to_string());
 
+    save_astrocyte_config(&config)?;
+    let mut guard = state.config.write().await;
+    *guard = config;
+    Ok(())
+}
+
+#[tauri::command]
+async fn set_is_oligo_mode(
+    enabled: bool,
+    state: tauri::State<'_, AstrocyteState>,
+) -> Result<(), String> {
+    let mut config = state.config.read().await.clone();
+    config.is_oligo_mode = enabled;
+    save_astrocyte_config(&config)?;
+    let mut guard = state.config.write().await;
+    *guard = config;
+    Ok(())
+}
+
+#[tauri::command]
+async fn set_active_skill_id(
+    skill_id: Option<String>,
+    state: tauri::State<'_, AstrocyteState>,
+) -> Result<(), String> {
+    let mut config = state.config.read().await.clone();
+    config.active_skill_id = skill_id
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty());
     save_astrocyte_config(&config)?;
     let mut guard = state.config.write().await;
     *guard = config;
@@ -329,6 +367,11 @@ fn build_entry(
     }
 }
 
+async fn clear_abort_slot(app: &tauri::AppHandle) {
+    let st = app.state::<AstrocyteState>();
+    *st.abort_token.write().await = None;
+}
+
 fn persist_chat_entries_non_blocking(session_id: String, entries: Vec<ChatEntry>) {
     tauri::async_runtime::spawn(async move {
         let write_result = tauri::async_runtime::spawn_blocking(move || {
@@ -343,43 +386,12 @@ fn persist_chat_entries_non_blocking(session_id: String, entries: Vec<ChatEntry>
     });
 }
 
-/// 三明治组装法：首部=当前 Persona System Prompt，中部=Session 历史，尾部=Injection Prompt (Author's Note)。
-/// 彻底修复「切换 Persona 只在开头生效」的 bug，避免长文本带来的大模型遗忘症。
-async fn build_session_messages(
-    state: &AstrocyteState,
-    session_id: &str,
-) -> Result<Vec<Message>, String> {
-    let history = state.get_history(session_id).await.unwrap_or_default();
-    let active_persona = state.active_persona.read().await.clone();
-
-    let mut messages = Vec::with_capacity(history.len() + 3);
-
-    // 1. 首部：强制读取全局 State 中当前激活的 Persona 的 System Prompt
-    messages.push(Message {
-        role: "system".to_string(),
-        content: active_persona.system_prompt,
-    });
-
-    // 2. 中部：Session 历史（User / Assistant 交互）
-    messages.extend(history);
-
-    // 3. 尾部：隐形 Injection Prompt（Author's Note / 最后通牒），紧随最后一条 User 之后
-    if let Some(note) = active_persona.authors_note {
-        if !note.trim().is_empty() {
-            messages.push(Message {
-                role: "system".to_string(),
-                content: format!("[AUTHOR_NOTE / 最后通牒]: {}", note),
-            });
-        }
-    }
-
-    Ok(messages)
-}
-
+/// 双模式分流：is_oligo_mode → Oligo Agent；否则直连 API。
 #[tauri::command]
 async fn evaluate_payload(
     payload: String,
     session_id: Option<String>,
+    skill_id: Option<String>,
     user_message_id: Option<String>,
     assistant_message_id: Option<String>,
     state: tauri::State<'_, AstrocyteState>,
@@ -392,45 +404,114 @@ async fn evaluate_payload(
 
     let active_persona = state.active_persona.read().await.clone();
     let active_persona_id = active_persona.id.clone();
+    let config = state.config.read().await.clone();
+    let is_oligo_mode = config.is_oligo_mode;
+    let effective_skill_id = skill_id
+        .as_deref()
+        .and_then(|s| {
+            let t = s.trim();
+            if t.is_empty() {
+                None
+            } else {
+                Some(t.to_string())
+            }
+        })
+        .or_else(|| config.active_skill_id.clone());
 
     let session_id = normalize_session_id(session_id);
     state.create_session(session_id.clone()).await;
+
+    let history = state.get_history(&session_id).await.unwrap_or_default();
     state
         .append_message_to_session(&session_id, "user", user_input.clone())
         .await?;
 
-    let outbound_messages = build_session_messages(&state, &session_id).await?;
-    let config = state.config.read().await.clone();
-    let provider = config
-        .active_provider()
-        .cloned()
-        .ok_or_else(|| "no active provider configured".to_string())?;
+    let oligo_messages =
+        inject_soul_into_messages(&active_persona, &history, &user_input);
+
+    let direct_messages =
+        build_direct_mode_messages(&active_persona, &history, &user_input);
+    let provider = config.active_provider().cloned();
+
     let app_handle = app.clone();
+    let persona_id = active_persona.id.clone();
+
+    let cancel_token = CancellationToken::new();
+    {
+        let mut guard = state.abort_token.write().await;
+        *guard = Some(cancel_token.clone());
+    }
 
     tauri::async_runtime::spawn(async move {
-        let model_reply =
-            match llm_client::stream_llm_response(outbound_messages, provider, &app_handle).await {
-            Ok(reply) => reply,
+        let model_reply = if is_oligo_mode {
+            llm_client::stream_oligo_agent(
+                persona_id,
+                effective_skill_id,
+                oligo_messages,
+                &app_handle,
+                cancel_token.clone(),
+            )
+            .await
+        } else {
+            let provider = match provider {
+                Some(p) => p,
+                None => {
+                    clear_abort_slot(&app_handle).await;
+                    let e = "no active provider configured".to_string();
+                    let _ = app_handle.emit("bb-stream-chunk", e.clone());
+                    let _ = app_handle.emit(
+                        "bb-stream-done",
+                        serde_json::json!({ "error": true, "message": e }),
+                    );
+                    return;
+                }
+            };
+            llm_client::stream_direct_api(
+                direct_messages,
+                provider,
+                &app_handle,
+                cancel_token.clone(),
+            )
+            .await
+        };
+
+        let model_reply = match model_reply {
+            Ok(r) => r,
+            Err(e) if e == llm_client::GENERATION_ABORTED => {
+                clear_abort_slot(&app_handle).await;
+                let user_id = user_message_id.unwrap_or_else(|| Uuid::new_v4().to_string());
+                let user_entries = vec![build_entry(
+                    user_id,
+                    "user",
+                    user_input.clone(),
+                    None,
+                    &session_id,
+                )];
+                persist_chat_entries_non_blocking(session_id.clone(), user_entries);
+                let _ = app_handle.emit(
+                    "bb-stream-done",
+                    serde_json::json!({ "aborted": true }),
+                );
+                return;
+            }
             Err(e) => {
                 warn!("[astrocyte] stream request failed: {}", e);
-                if let Err(emit_err) = app_handle.emit("bb-stream-chunk", e.clone()) {
-                    warn!("[astrocyte] emit bb-stream-chunk failed after error: {}", emit_err);
-                }
-                if let Err(emit_err) =
-                    app_handle.emit("bb-stream-done", serde_json::json!({ "error": true, "message": e }))
-                {
-                    warn!("[astrocyte] emit bb-stream-done failed after error: {}", emit_err);
-                }
+                clear_abort_slot(&app_handle).await;
+                let _ = app_handle.emit("bb-stream-chunk", e.clone());
+                let _ = app_handle.emit(
+                    "bb-stream-done",
+                    serde_json::json!({ "error": true, "message": e }),
+                );
                 return;
             }
         };
 
-        let state = app_handle.state::<AstrocyteState>();
-        if let Err(e) = state
+        let app_state = app_handle.state::<AstrocyteState>();
+        if let Err(e) = app_state
             .append_message_to_session(&session_id, "assistant", model_reply.clone())
             .await
         {
-            warn!("[astrocyte] append assistant message to state failed: {}", e);
+            warn!("[astrocyte] append assistant message failed: {}", e);
         }
 
         let user_id = user_message_id.unwrap_or_else(|| Uuid::new_v4().to_string());
@@ -447,12 +528,86 @@ async fn evaluate_payload(
         ];
         persist_chat_entries_non_blocking(session_id.clone(), entries);
 
-        if let Err(e) = app_handle.emit("bb-stream-done", "DONE") {
-            warn!("[astrocyte] emit bb-stream-done failed: {}", e);
-        }
+        clear_abort_slot(&app_handle).await;
+        let _ = app_handle.emit("bb-stream-done", "DONE");
     });
 
     Ok(())
+}
+
+fn normalize_role(role: &str) -> String {
+    match role {
+        "bb" => "assistant".to_string(),
+        r => r.to_string(),
+    }
+}
+
+/// 强制灵魂注入：将 active_persona 的完整 system_prompt（含 authors_note）塞入 messages 第 0 位。
+/// Oligo Mode 必须使用此函数组装的 messages，确保 BB 人设与工具契约一字不差地进入大模型。
+fn inject_soul_into_messages(
+    persona: &PersonaConfig,
+    history: &[Message],
+    user_input: &str,
+) -> Vec<Message> {
+    let mut full_prompt = persona.system_prompt.clone();
+    if let Some(note) = &persona.authors_note {
+        if !note.trim().is_empty() {
+            full_prompt.push_str("\n\n[AUTHOR_NOTE]: ");
+            full_prompt.push_str(note);
+        }
+    }
+    let soul = Message {
+        role: "system".to_string(),
+        content: full_prompt,
+    };
+    let mut msgs = Vec::with_capacity(history.len() + 2);
+    msgs.push(soul);
+    msgs.extend(
+        history
+            .iter()
+            .map(|m| Message {
+                role: normalize_role(&m.role),
+                content: m.content.clone(),
+            }),
+    );
+    msgs.push(Message {
+        role: "user".to_string(),
+        content: user_input.to_string(),
+    });
+    msgs
+}
+
+fn build_direct_mode_messages(
+    persona: &PersonaConfig,
+    history: &[Message],
+    user_input: &str,
+) -> Vec<Message> {
+    let mut msgs = Vec::with_capacity(history.len() + 3);
+    msgs.push(Message {
+        role: "system".to_string(),
+        content: persona.system_prompt.clone(),
+    });
+    msgs.extend(
+        history
+            .iter()
+            .map(|m| Message {
+                role: normalize_role(&m.role),
+                content: m.content.clone(),
+            }),
+    );
+    if let Some(note) = &persona.authors_note {
+        if !note.trim().is_empty() {
+            msgs.push(Message {
+                role: "system".to_string(),
+                content: format!("[AUTHOR_NOTE]: {}", note),
+            });
+        }
+    }
+    msgs.push(Message {
+        role: "user".to_string(),
+        content: user_input.to_string(),
+    });
+    msgs
 }
 
 #[tauri::command]
@@ -667,7 +822,10 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             greet,
             process_signal,
+            abort_generation,
             evaluate_payload,
+            set_is_oligo_mode,
+            set_active_skill_id,
             get_config,
             save_provider,
             delete_provider,

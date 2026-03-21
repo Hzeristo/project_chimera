@@ -53,6 +53,10 @@ impl ProviderConfig {
 pub struct AstrocyteConfig {
     pub active_provider_id: Option<String>,
     pub providers: Vec<ProviderConfig>,
+    #[serde(default)]
+    pub is_oligo_mode: bool,
+    #[serde(default)]
+    pub active_skill_id: Option<String>,
 }
 
 impl AstrocyteConfig {

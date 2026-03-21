@@ -1,11 +1,19 @@
+//! 双引擎发射层：No-Agent 直连 API / Agentic 代理 Oligo。
+//! 使用 reqwest-eventsource 处理 SSE，杜绝 UTF-8 截断与 O(n²) 拷贝。
+
 use futures_util::StreamExt;
-use regex::Regex;
+use reqwest_eventsource::{Event, RequestBuilderExt};
 use serde::Serialize;
 use tauri::{AppHandle, Emitter};
+use tokio_util::sync::CancellationToken;
 
 use crate::settings::ProviderConfig;
 use crate::state::Message;
-use crate::tools;
+
+const OLIGO_INVOKE_URL: &str = "http://127.0.0.1:33333/v1/agent/invoke";
+
+/// Sentinel returned from stream functions when the user aborts generation (`evaluate_payload` matches on this).
+pub const GENERATION_ABORTED: &str = "__ASTROCYTE_GENERATION_ABORTED__";
 
 #[derive(Serialize)]
 struct OpenAiMessage {
@@ -20,6 +28,20 @@ struct OpenAiChatRequest {
     stream: bool,
 }
 
+#[derive(Serialize)]
+struct OligoAgentRequest {
+    persona_id: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    skill_id: Option<String>,
+    messages: Vec<OligoMessage>,
+}
+
+#[derive(Serialize)]
+struct OligoMessage {
+    role: String,
+    content: String,
+}
+
 fn build_chat_completions_url(base_url: &str) -> String {
     let trimmed = base_url.trim().trim_end_matches('/');
     if trimmed.ends_with("/chat/completions") {
@@ -29,280 +51,183 @@ fn build_chat_completions_url(base_url: &str) -> String {
     }
 }
 
-async fn request_openai_compatible_completion(
-    client: &reqwest::Client,
-    provider: &ProviderConfig,
-    messages: Vec<OpenAiMessage>,
-) -> Result<reqwest::Response, String> {
-    let body = OpenAiChatRequest {
-        model: provider.model_name.clone(),
-        messages,
-        stream: true,
-    };
-    let endpoint = build_chat_completions_url(&provider.base_url);
-
-    let response = client
-        .post(endpoint)
-        .bearer_auth(&provider.api_key)
-        .json(&body)
-        .send()
-        .await
-        .map_err(|e| format!("「BB」provider request failed: {}", e))?;
-
-    if !response.status().is_success() {
-        let status = response.status();
-        let err_body = response
-            .text()
-            .await
-            .unwrap_or_else(|_| "<failed to read error body>".to_string());
-        return Err(format!("「BB」provider API error {}: {}", status, err_body));
-    }
-
-    Ok(response)
-}
-
-fn extract_fragment_from_sse_line(line: &str) -> Result<Option<String>, String> {
-    let Some(data) = line.strip_prefix("data:") else {
-        return Ok(None);
-    };
-
+/// 从 OpenAI 格式 data 中提取 choices[0].delta.content，遇 [DONE] 返回 None。
+fn extract_openai_content(data: &str) -> Option<Option<String>> {
     let trimmed = data.trim();
-    if trimmed == "[DONE]" || trimmed.is_empty() {
-        return Ok(None);
+    if trimmed.is_empty() {
+        return Some(None);
     }
-
-    let json: serde_json::Value = serde_json::from_str(trimmed)
-        .map_err(|e| format!("「BB」provider stream JSON parse failed: {}", e))?;
-
-    let Some(fragment) = json
-        .get("choices")
-        .and_then(|v| v.get(0))
-        .and_then(|v| v.get("delta"))
-        .and_then(|v| v.get("content"))
+    if trimmed == "[DONE]" {
+        return None;
+    }
+    let json = serde_json::from_str::<serde_json::Value>(trimmed).ok()?;
+    let content = json
+        .get("choices")?
+        .get(0)?
+        .get("delta")?
+        .get("content")
         .and_then(|v| v.as_str())
-    else {
-        return Ok(None);
-    };
-
-    if fragment.is_empty() {
-        return Ok(None);
-    }
-
-    Ok(Some(fragment.to_string()))
+        .filter(|s| !s.is_empty())
+        .map(String::from);
+    Some(content)
 }
 
-fn longest_cmd_prefix_suffix_len(buffer: &str, cmd_prefix: &str) -> usize {
-    let max = buffer.len().min(cmd_prefix.len());
-    for len in (1..=max).rev() {
-        if buffer.ends_with(&cmd_prefix[..len]) {
-            return len;
-        }
-    }
-    0
-}
-
-fn phase_one_fragment_step(
-    fragment: &str,
-    app: &AppHandle,
-    cmd_regex: &Regex,
-    intercept_buffer: &mut String,
-    full_response_text: &mut String,
-    bypass_mode: &mut bool,
-) -> Result<Option<String>, String> {
-    const NORMAL_TOLERANCE_CHARS: usize = 10;
-    const CMD_PREFIX: &str = r#"<CMD:search_vault(""#;
-
-    // 保留参数以兼容调用签名；新的阶段一策略不再进入“永久旁路”。
-    *bypass_mode = false;
-
-    intercept_buffer.push_str(fragment);
-
-    if let Some(captures) = cmd_regex.captures(intercept_buffer) {
-        let extracted = captures
-            .get(1)
-            .map(|m| m.as_str().trim().to_string())
-            .filter(|s| !s.is_empty());
-        if let Some(keyword) = extracted {
-            return Ok(Some(keyword));
-        }
-    }
-
-    // 1) 如果已出现完整命令前缀但尚未闭合 ")>"，则从前缀起全部冻结。
-    let mut hold_from = intercept_buffer.len();
-    if let Some(start_idx) = intercept_buffer.rfind(CMD_PREFIX) {
-        let tail = &intercept_buffer[start_idx..];
-        if !tail.contains(")>") {
-            hold_from = start_idx;
-        }
-    }
-
-    // 2) 否则仅冻结末尾可能构成命令前缀的残片（处理跨 chunk 拆分）。
-    if hold_from == intercept_buffer.len() {
-        let hold_tail_len = longest_cmd_prefix_suffix_len(intercept_buffer, CMD_PREFIX);
-        hold_from = intercept_buffer.len().saturating_sub(hold_tail_len);
-    }
-
-    let releasable_len = hold_from;
-    if releasable_len == 0 {
-        return Ok(None);
-    }
-
-    let releasable_preview = &intercept_buffer[..releasable_len];
-    if releasable_preview.chars().count() < NORMAL_TOLERANCE_CHARS
-        && hold_from == intercept_buffer.len()
-    {
-        return Ok(None);
-    }
-
-    let to_emit = intercept_buffer[..releasable_len].to_string();
-    // let broken_by_newline = to_emit.contains('\n');
-    // let too_long_without_closure = false;
-    // if broken_by_newline || too_long_without_closure {
-    // }
-    // let trimmed_buf = to_emit.trim_start();
-    intercept_buffer.drain(..releasable_len);
-    full_response_text.push_str(&to_emit);
-    app.emit("bb-stream-chunk", to_emit)
-        .map_err(|e| format!("「BB」emit bb-stream-chunk failed: {}", e))?;
-
-    Ok(None)
-}
-
-pub async fn stream_llm_response(
+/// No-Agent 模式：EventSource 解析 SSE，直连 OpenAI/DeepSeek。
+pub async fn stream_direct_api(
     messages: Vec<Message>,
     provider: ProviderConfig,
     app_handle: &AppHandle,
+    cancel_token: CancellationToken,
 ) -> Result<String, String> {
     provider.validate()?;
     let client = reqwest::Client::new();
-    let cmd_regex = Regex::new(r#"<CMD:search_vault\("([^"]+)"\)>"#)
-        .map_err(|e| format!("「BB」invalid command regex: {}", e))?;
-
-    let openai_messages = messages
-        .iter()
-        .map(|m| OpenAiMessage {
-            role: m.role.clone(),
-            content: m.content.clone(),
-        })
-        .collect::<Vec<_>>();
-
-    let response =
-        request_openai_compatible_completion(&client, &provider, openai_messages).await?;
-    let mut stream = response.bytes_stream();
-    let mut carry = String::new();
-    let mut intercept_buffer = String::new();
-    let mut full_response_text = String::new();
-    let mut bypass_mode = false;
-    let mut extracted_keyword: Option<String> = None;
-
-    'phase_one: while let Some(next_chunk) = stream.next().await {
-        let chunk = next_chunk
-            .map_err(|e| format!("「BB」provider stream read failed (phase1): {}", e))?;
-        carry.push_str(&String::from_utf8_lossy(&chunk));
-
-        while let Some(pos) = carry.find('\n') {
-            let line = carry[..pos].trim_end_matches('\r').to_string();
-            carry.drain(..=pos);
-            if let Some(fragment) = extract_fragment_from_sse_line(&line)? {
-                if let Some(keyword) = phase_one_fragment_step(
-                    &fragment,
-                    app_handle,
-                    &cmd_regex,
-                    &mut intercept_buffer,
-                    &mut full_response_text,
-                    &mut bypass_mode,
-                )? {
-                    extracted_keyword = Some(keyword);
-                    break 'phase_one;
-                }
-            }
-        }
-    }
-
-    if extracted_keyword.is_none() {
-        let tail = carry.trim();
-        if !tail.is_empty() {
-            if let Some(fragment) = extract_fragment_from_sse_line(tail)? {
-                if let Some(keyword) = phase_one_fragment_step(
-                    &fragment,
-                    app_handle,
-                    &cmd_regex,
-                    &mut intercept_buffer,
-                    &mut full_response_text,
-                    &mut bypass_mode,
-                )? {
-                    extracted_keyword = Some(keyword);
-                }
-            }
-        }
-    }
-
-    if let Some(keyword) = extracted_keyword {
-
-        let tool_result = tools::delegate_search_vault(&keyword).await;
-
-        let mut reroll_messages = messages
+    let body = OpenAiChatRequest {
+        model: provider.model_name,
+        messages: messages
             .iter()
             .map(|m| OpenAiMessage {
                 role: m.role.clone(),
                 content: m.content.clone(),
             })
-            .collect::<Vec<_>>();
-        reroll_messages.push(OpenAiMessage {
-            role: "assistant".to_string(),
-            content: format!(r#"<CMD:search_vault("{}")>"#, keyword),
-        });
-        reroll_messages.push(OpenAiMessage {
-            role: "user".to_string(),
-            content: format!(
-                "[SYSTEM TOOL RESULT]: External Exocortex returned this data for your query. \
-                You MUST now provide the final answer maintaining your persona. DO NOT output the <CMD> tag again.\n\nData:\n{}",
-                tool_result
-            ),
-        });
+            .collect(),
+        stream: true,
+    };
+    let url = build_chat_completions_url(&provider.base_url);
 
-        let second_response =
-            request_openai_compatible_completion(&client, &provider, reroll_messages).await?;
-        let mut second_stream = second_response.bytes_stream();
-        let mut second_carry = String::new();
-        let mut rerolled_full_response = String::new();
+    let mut es = client
+        .post(&url)
+        .bearer_auth(&provider.api_key)
+        .json(&body)
+        .eventsource()
+        .map_err(|e| format!("EventSource init failed: {}", e))?;
 
-        while let Some(next_chunk) = second_stream.next().await {
-            let chunk = next_chunk
-                .map_err(|e| format!("「BB」provider stream read failed (phase2): {}", e))?;
-            second_carry.push_str(&String::from_utf8_lossy(&chunk));
+    let mut full_text = String::new();
 
-            while let Some(pos) = second_carry.find('\n') {
-                let line = second_carry[..pos].trim_end_matches('\r').to_string();
-                second_carry.drain(..=pos);
-                if let Some(fragment) = extract_fragment_from_sse_line(&line)? {
-                    rerolled_full_response.push_str(&fragment);
-                    app_handle
-                        .emit("bb-stream-chunk", fragment)
-                        .map_err(|e| format!("「BB」emit bb-stream-chunk failed: {}", e))?;
+    loop {
+        tokio::select! {
+            item = es.next() => {
+                let Some(item) = item else { break };
+                match item {
+                    Ok(Event::Open) => {}
+                    Ok(Event::Message(msg)) => {
+                        let data = msg.data.trim();
+                        match extract_openai_content(data) {
+                            None => break,
+                            Some(None) => {}
+                            Some(Some(content)) => {
+                                full_text.push_str(&content);
+                                app_handle
+                                    .emit("bb-stream-chunk", content)
+                                    .map_err(|e| format!("emit failed: {}", e))?;
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        if !full_text.is_empty() {
+                            return Ok(full_text);
+                        }
+                        return Err(format!("SSE stream error: {}", e));
+                    }
                 }
             }
-        }
-
-        let second_tail = second_carry.trim();
-        if !second_tail.is_empty() {
-            if let Some(fragment) = extract_fragment_from_sse_line(second_tail)? {
-                rerolled_full_response.push_str(&fragment);
-                app_handle
-                    .emit("bb-stream-chunk", fragment)
-                    .map_err(|e| format!("「BB」emit bb-stream-chunk failed: {}", e))?;
+            _ = cancel_token.cancelled() => {
+                let _ = app_handle.emit("bb-sys-event", "[Generation Aborted by User]");
+                return Err(GENERATION_ABORTED.to_string());
             }
         }
-
-        return Ok(rerolled_full_response);
     }
 
-    if !intercept_buffer.is_empty() {
-        full_response_text.push_str(&intercept_buffer);
-        app_handle
-            .emit("bb-stream-chunk", intercept_buffer)
-            .map_err(|e| format!("「BB」emit bb-stream-chunk failed: {}", e))?;
+    Ok(full_text)
+}
+
+/// Agentic 模式：EventSource 解析 SSE，data 帧内容全透传 emit。
+pub async fn stream_oligo_agent(
+    persona_id: String,
+    skill_id: Option<String>,
+    messages: Vec<Message>,
+    app_handle: &AppHandle,
+    cancel_token: CancellationToken,
+) -> Result<String, String> {
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(300))
+        .build()
+        .map_err(|e| format!("reqwest client build failed: {}", e))?;
+
+    let body = OligoAgentRequest {
+        persona_id,
+        skill_id,
+        messages: messages
+            .iter()
+            .map(|m| OligoMessage {
+                role: m.role.clone(),
+                content: m.content.clone(),
+            })
+            .collect(),
+    };
+
+    let mut es = client
+        .post(OLIGO_INVOKE_URL)
+        .json(&body)
+        .eventsource()
+        .map_err(|e| format!("Oligo EventSource init failed: {}", e))?;
+
+    let mut full_text = String::new();
+
+    loop {
+        tokio::select! {
+            item = es.next() => {
+                let Some(item) = item else { break };
+                match item {
+                    Ok(Event::Open) => {}
+                    Ok(Event::Message(msg)) => {
+                        let data = msg.data.trim();
+                        if data == "[DONE]" {
+                            break;
+                        }
+                        if data.is_empty() {
+                            continue;
+                        }
+
+                        if let Ok(json_obj) = serde_json::from_str::<serde_json::Value>(data) {
+                            if let Some(content_str) = json_obj.get("content").and_then(|v| v.as_str()) {
+                                if content_str.starts_with("__SYS_TOOL_CALL__") {
+                                    let action_detail =
+                                        content_str.trim_start_matches("__SYS_TOOL_CALL__");
+                                    app_handle
+                                        .emit("bb-sys-event", action_detail)
+                                        .map_err(|e| format!("emit failed: {}", e))?;
+                                } else {
+                                    full_text.push_str(content_str);
+                                    app_handle
+                                        .emit("bb-stream-chunk", content_str)
+                                        .map_err(|e| format!("emit failed: {}", e))?;
+                                }
+                            }
+                        } else if let Some(action_detail) = data.strip_prefix("__SYS_TOOL_CALL__") {
+                            app_handle
+                                .emit("bb-sys-event", action_detail)
+                                .map_err(|e| format!("emit failed: {}", e))?;
+                        } else {
+                            full_text.push_str(data);
+                            app_handle
+                                .emit("bb-stream-chunk", data)
+                                .map_err(|e| format!("emit failed: {}", e))?;
+                        }
+                    }
+                    Err(e) => {
+                        if !full_text.is_empty() {
+                            return Ok(full_text);
+                        }
+                        return Err(format!("Oligo SSE stream error: {}", e));
+                    }
+                }
+            }
+            _ = cancel_token.cancelled() => {
+                let _ = app_handle.emit("bb-sys-event", "[Generation Aborted by User]");
+                return Err(GENERATION_ABORTED.to_string());
+            }
+        }
     }
 
-    Ok(full_response_text)
+    Ok(full_text)
 }

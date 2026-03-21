@@ -9,7 +9,7 @@
   import 'highlight.js/styles/atom-one-dark.css';
   import 'katex/dist/katex.min.css';
 
-  type Sender = 'system' | 'user' | 'bb';
+  type Sender = 'system' | 'user' | 'bb' | 'system_log';
   type HistoryEntry = {
     id: string;
     sender: Sender;
@@ -17,6 +17,8 @@
     timestamp: string;
     persona?: string;
     isLoading?: boolean;
+    /** Set when user aborted mid-stream; assistant text stays in UI but was not persisted. */
+    streamAborted?: boolean;
   };
   type ProviderConfig = {
     id: string;
@@ -28,6 +30,7 @@
   type AstrocyteConfig = {
     active_provider_id: string | null;
     providers: ProviderConfig[];
+    is_oligo_mode: boolean;
   };
   type PersonaConfig = {
     id: string;
@@ -85,11 +88,13 @@
   let inputEl: HTMLTextAreaElement | null = null;
   let outputEl: HTMLElement | null = null;
   let currentBBMessageId: string | null = null;
-  let isStreaming = false;
+  let pendingAssistantMessageId: string | null = null;
+  let isGenerating = false;
   let pendingChunkBuffer = '';
   let pendingFlushFrame: number | null = null;
   let unlistenClipboardHijack: (() => void) | null = null;
   let unlistenBBChunk: (() => void) | null = null;
+  let unlistenBBSysEvent: (() => void) | null = null;
   let unlistenBBDone: (() => void) | null = null;
   let editTextareaEl: HTMLTextAreaElement | null = null;
   const markdownCache = new Map<string, { text: string; html: string }>();
@@ -99,7 +104,7 @@
   let settingsError = '';
   let settingsStatus = '';
   let settingsTab: 'provider' | 'persona' = 'provider';
-  let config: AstrocyteConfig = { active_provider_id: null, providers: [] };
+  let config: AstrocyteConfig = { active_provider_id: null, providers: [], is_oligo_mode: false };
   let selectedProviderId: string | null = null;
   let providerDraft: ProviderConfig = {
     id: makeId(),
@@ -203,7 +208,10 @@
 
   function toBackendHistory(entries: HistoryEntry[]): BackendMessage[] {
     return entries
-      .filter((entry) => (entry.sender === 'user' || entry.sender === 'bb') && !entry.isLoading)
+      .filter(
+        (entry) =>
+          (entry.sender === 'user' || entry.sender === 'bb') && !entry.isLoading && !entry.streamAborted
+      )
       .map((entry) => ({
         role: entry.sender === 'user' ? 'user' : 'assistant',
         content: entry.text,
@@ -212,7 +220,10 @@
 
   function toSyncEntries(entries: HistoryEntry[]): Array<{ id: string; role: string; content: string; timestamp: string; persona?: string }> {
     return entries
-      .filter((entry) => (entry.sender === 'user' || entry.sender === 'bb') && !entry.isLoading)
+      .filter(
+        (entry) =>
+          (entry.sender === 'user' || entry.sender === 'bb') && !entry.isLoading && !entry.streamAborted
+      )
       .map((entry) => ({
         id: entry.id,
         role: entry.sender === 'user' ? 'user' : 'assistant',
@@ -267,7 +278,8 @@
     editingMessageId = null;
     editBuffer = '';
     currentBBMessageId = null;
-    isStreaming = false;
+    pendingAssistantMessageId = null;
+    isGenerating = false;
     pendingChunkBuffer = '';
     if (pendingFlushFrame !== null) {
       cancelAnimationFrame(pendingFlushFrame);
@@ -402,6 +414,7 @@
     config = {
       active_provider_id: nextConfig?.active_provider_id ?? null,
       providers: nextConfig?.providers ?? [],
+      is_oligo_mode: nextConfig?.is_oligo_mode ?? false,
     };
     if (selectedProviderId) {
       const selected = config.providers.find((provider) => provider.id === selectedProviderId);
@@ -631,6 +644,17 @@
     showSettingsPanel = false;
   }
 
+  async function toggleFireSelector() {
+    const next = !config.is_oligo_mode;
+    try {
+      await invoke('set_is_oligo_mode', { enabled: next });
+      await loadConfig();
+    } catch (error) {
+      const errText = typeof error === 'string' ? error : 'Failed to toggle fire mode';
+      notifySystem(`[FIRE_SELECTOR_ERROR] ${errText}`);
+    }
+  }
+
   function onOverlayKeydown(event: KeyboardEvent) {
     if (event.key === 'Escape') {
       closeSettingsPanel();
@@ -659,6 +683,30 @@
       pendingFlushFrame = null;
       await flushPendingChunk();
     });
+  }
+
+  function ensureBBStreamEntry(): void {
+    const last = history[history.length - 1];
+    const currentExists = currentBBMessageId
+      ? history.some((msg) => msg.id === currentBBMessageId)
+      : false;
+    if (currentExists && last?.id === currentBBMessageId) {
+      return;
+    }
+    const loadingId = pendingAssistantMessageId ?? makeId();
+    pendingAssistantMessageId = null;
+    history = [
+      ...history,
+      {
+        id: loadingId,
+        sender: 'bb',
+        text: '',
+        timestamp: nowIso(),
+        persona: personaSnapshot.active_persona_id || DEFAULT_PERSONA,
+        isLoading: true,
+      },
+    ];
+    currentBBMessageId = loadingId;
   }
 
   function beginEditingMessage(msg: HistoryEntry) {
@@ -702,7 +750,7 @@
       history = history.filter((entry) => entry.id !== msg.id);
       if (currentBBMessageId === msg.id) {
         currentBBMessageId = null;
-        isStreaming = false;
+        isGenerating = false;
       }
       await syncTimelineToBackend();
     } catch (error) {
@@ -711,8 +759,20 @@
     }
   }
 
+  async function onAbortGeneration() {
+    if (!isGenerating) return;
+    try {
+      await invoke('abort_generation');
+    } catch (error) {
+      const errText = typeof error === 'string' ? error : 'abort_generation failed';
+      notifySystem(`[ABORT_ERROR] ${errText}`);
+      return;
+    }
+    isGenerating = false;
+  }
+
   async function dispatchEvaluate(message: string, appendUser: boolean) {
-    if (isStreaming) return;
+    if (isGenerating) return;
     const normalized = message.trim();
     if (!normalized) return;
 
@@ -732,20 +792,9 @@
       userMsgId = lastUser?.id ?? makeId();
     }
 
-    const loadingId = makeId();
-    history = [
-      ...history,
-      {
-        id: loadingId,
-        sender: 'bb',
-        text: '',
-        timestamp: nowIso(),
-        persona: personaSnapshot.active_persona_id || DEFAULT_PERSONA,
-        isLoading: true,
-      },
-    ];
-    currentBBMessageId = loadingId;
-    isStreaming = true;
+    currentBBMessageId = null;
+    pendingAssistantMessageId = makeId();
+    isGenerating = true;
     await scrollToBottom();
 
     try {
@@ -753,27 +802,31 @@
         payload: normalized,
         sessionId: activeSessionId,
         userMessageId: userMsgId,
-        assistantMessageId: loadingId,
+        assistantMessageId: pendingAssistantMessageId,
       });
     } catch (error) {
       const errText = typeof error === 'string' ? error : 'Unknown gateway failure';
-      history = history.map((msg) =>
-        msg.id === loadingId
-          ? {
-              ...msg,
-              text: `[ERROR] ${errText}`,
-              timestamp: nowIso(),
-              isLoading: false,
-            }
-          : msg
-      );
+      ensureBBStreamEntry();
+      if (currentBBMessageId) {
+        history = history.map((msg) =>
+          msg.id === currentBBMessageId
+            ? {
+                ...msg,
+                text: `[ERROR] ${errText}`,
+                timestamp: nowIso(),
+                isLoading: false,
+              }
+            : msg
+        );
+      }
       currentBBMessageId = null;
-      isStreaming = false;
+      pendingAssistantMessageId = null;
+      isGenerating = false;
     }
   }
 
   async function retryFromMessage(msg: HistoryEntry) {
-    if (msg.sender !== 'bb' || msg.isLoading || isStreaming) return;
+    if (msg.sender !== 'bb' || msg.isLoading || isGenerating) return;
     const index = history.findIndex((entry) => entry.id === msg.id);
     if (index <= 0) return;
 
@@ -846,35 +899,80 @@
 
     unlistenBBChunk = await listen<string>('bb-stream-chunk', async (event) => {
       const fragment = typeof event.payload === 'string' ? event.payload : '';
-      if (!fragment || !currentBBMessageId) return;
+      if (!fragment) return;
+      ensureBBStreamEntry();
       queueBBChunk(fragment);
     });
 
-    unlistenBBDone = await listen<{ error?: boolean } | string>('bb-stream-done', async (event) => {
-      const isError = typeof event.payload === 'object' && event.payload?.error === true;
-      if (pendingFlushFrame !== null) {
-        cancelAnimationFrame(pendingFlushFrame);
-        pendingFlushFrame = null;
-      }
-      await flushPendingChunk();
-      if (currentBBMessageId) {
-        history = history.map((msg) => {
-          if (msg.id !== currentBBMessageId) return msg;
-          const fallback =
-            isError && !msg.text.trim() ? '[STREAM_ABORTED]' : isError ? `${msg.text} [STREAM_ABORTED]` : msg.text;
-          return {
-            ...msg,
-            text: fallback,
-            isLoading: false,
-            timestamp: nowIso(),
-          };
-        });
-      }
-      isStreaming = false;
+    unlistenBBSysEvent = await listen<string>('bb-sys-event', async (event) => {
+      const payload = typeof event.payload === 'string' ? event.payload : '';
+      if (!payload.trim()) return;
+      if (payload === '[Generation Aborted by User]') return;
+      history = [
+        ...history,
+        {
+          id: makeId(),
+          sender: 'system_log',
+          text: `System accessing: ${payload}`,
+          timestamp: nowIso(),
+          persona: personaSnapshot.active_persona_id || DEFAULT_PERSONA,
+        },
+      ];
       currentBBMessageId = null;
       await scrollToBottom();
-      await refreshSessionHistory();
     });
+
+    unlistenBBDone = await listen<{ error?: boolean; aborted?: boolean } | string>(
+      'bb-stream-done',
+      async (event) => {
+        const raw = event.payload;
+        const isError = typeof raw === 'object' && raw !== null && raw.error === true;
+        const isAborted = typeof raw === 'object' && raw !== null && raw.aborted === true;
+        if (pendingFlushFrame !== null) {
+          cancelAnimationFrame(pendingFlushFrame);
+          pendingFlushFrame = null;
+        }
+        await flushPendingChunk();
+        if (isAborted) {
+          if (currentBBMessageId) {
+            history = history.map((msg) =>
+              msg.id === currentBBMessageId
+                ? {
+                    ...msg,
+                    isLoading: false,
+                    streamAborted: true,
+                    timestamp: nowIso(),
+                  }
+                : msg
+            );
+          }
+          isGenerating = false;
+          currentBBMessageId = null;
+          pendingAssistantMessageId = null;
+          await scrollToBottom();
+          await refreshSessionHistory();
+          return;
+        }
+        if (currentBBMessageId) {
+          history = history.map((msg) => {
+            if (msg.id !== currentBBMessageId) return msg;
+            const fallback =
+              isError && !msg.text.trim() ? '[STREAM_ABORTED]' : isError ? `${msg.text} [STREAM_ABORTED]` : msg.text;
+            return {
+              ...msg,
+              text: fallback,
+              isLoading: false,
+              timestamp: nowIso(),
+            };
+          });
+        }
+        isGenerating = false;
+        currentBBMessageId = null;
+        pendingAssistantMessageId = null;
+        await scrollToBottom();
+        await refreshSessionHistory();
+      }
+    );
   });
 
   onDestroy(() => {
@@ -885,6 +983,10 @@
     if (unlistenBBChunk) {
       unlistenBBChunk();
       unlistenBBChunk = null;
+    }
+    if (unlistenBBSysEvent) {
+      unlistenBBSysEvent();
+      unlistenBBSysEvent = null;
     }
     if (unlistenBBDone) {
       unlistenBBDone();
@@ -931,7 +1033,7 @@
   async function submitInput(event?: SubmitEvent) {
     event?.preventDefault();
     const message = inputSignal.trim();
-    if (!message || isStreaming) return;
+    if (!message || isGenerating) return;
     inputSignal = '';
     resetInputHeight();
     await dispatchEvaluate(message, true);
@@ -942,9 +1044,20 @@
   <div class="hud-main">
     <header class="hud-header" data-tauri-drag-region>
       <span>[ BB_CHANNEL :: ASTROCYTE GATEWAY ]</span>
-      <button class="settings-trigger" type="button" on:click={openSettingsPanel} title="Arsenal Settings">
-        ⚙
-      </button>
+      <div class="header-right">
+        <button
+          class="fire-selector"
+          class:active={config.is_oligo_mode}
+          type="button"
+          on:click={toggleFireSelector}
+          title={config.is_oligo_mode ? 'Oligo Core engaged – click to switch to Direct Link' : 'Direct Link – click to engage Oligo Core'}
+        >
+          {config.is_oligo_mode ? '[OLIGO CORE]' : '[DIRECT LINK]'}
+        </button>
+        <button class="settings-trigger" type="button" on:click={openSettingsPanel} title="Arsenal Settings">
+          ⚙
+        </button>
+      </div>
     </header>
 
     <div class="middle-arena">
@@ -994,7 +1107,11 @@
           <div class="archive-banner">{archiveBannerText}</div>
         {/if}
         {#each history as msg (msg.id)}
-        <article class="msg-row" data-sender={msg.sender}>
+        <article
+          class="msg-row"
+          data-sender={msg.sender}
+          data-stream-aborted={msg.streamAborted ? 'true' : undefined}
+        >
           {#if editingMessageId === msg.id}
             <textarea
               class="msg-editor"
@@ -1003,16 +1120,22 @@
               on:keydown={onEditKeydown}
               on:blur={commitEditingMessage}
             ></textarea>
-          {:else}
+          {:else if msg.sender === 'system_log'}
+            <div class="system-log-raw">{msg.text}</div>
+          {:else if msg.sender === 'bb' || msg.sender === 'user'}
             <div class="msg-content" data-sender={msg.sender} data-loading={msg.isLoading ? 'true' : undefined}>
               {@html renderMarkdown(msg)}
             </div>
+          {:else}
+            <div class="msg-content" data-sender={msg.sender} data-loading={msg.isLoading ? 'true' : undefined}>
+              {msg.text}
+            </div>
           {/if}
-          {#if msg.sender !== 'system'}
+          {#if msg.sender === 'user' || msg.sender === 'bb'}
             <div class="msg-actions" aria-label="assistant message actions">
               <button class="msg-action" type="button" title="Edit" on:click={() => onAiAction('edit', msg)}>E</button>
               <button class="msg-action" type="button" title="Delete" on:click={() => onAiAction('delete', msg)}>D</button>
-              <button class="msg-action" type="button" title="Retry" disabled={msg.sender !== 'bb' || msg.isLoading || isStreaming} on:click={() => onAiAction('retry', msg)}>R</button>
+              <button class="msg-action" type="button" title="Retry" disabled={msg.sender !== 'bb' || msg.isLoading || isGenerating} on:click={() => onAiAction('retry', msg)}>R</button>
             </div>
           {/if}
         </article>
@@ -1034,17 +1157,29 @@
           {/each}
         </select>
       </div>
-      <textarea
-        class="hud-input"
-        bind:this={inputEl}
-        bind:value={inputSignal}
-        on:input={adjustInputHeight}
-        on:keydown={onInputKeydown}
-        placeholder="> Awaiting signal..."
-        autocomplete="off"
-        spellcheck="false"
-        rows="1"
-      ></textarea>
+      <div class="hud-input-row">
+        <textarea
+          class="hud-input"
+          bind:this={inputEl}
+          bind:value={inputSignal}
+          on:input={adjustInputHeight}
+          on:keydown={onInputKeydown}
+          placeholder="> Awaiting signal..."
+          autocomplete="off"
+          spellcheck="false"
+          rows="1"
+        ></textarea>
+        {#if isGenerating}
+          <button
+            type="button"
+            class="signal-abort-btn"
+            title="Hard-stop generation (partial reply is not saved)"
+            on:click|stopPropagation={() => onAbortGeneration()}
+          >
+            [ X ABORT ]
+          </button>
+        {/if}
+      </div>
     </form>
   </div>
 
@@ -1660,6 +1795,21 @@
     border-top: 1px solid rgba(187, 154, 247, 0.3);
     background: #0a0a0f;
     -webkit-app-region: no-drag;
+  }
+
+  .hud-input-row {
+    display: flex;
+    flex-direction: row;
+    align-items: flex-end;
+    gap: 10px;
+    padding: 0 8px 10px 12px;
+    box-sizing: border-box;
+  }
+
+  .hud-input-row .hud-input {
+    flex: 1;
+    min-width: 0;
+    padding: 12px 8px 12px 12px;
   }
 
   .persona-quick-switch {
