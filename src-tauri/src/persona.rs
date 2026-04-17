@@ -44,16 +44,7 @@ Your Cognitive Posture:
 
 Format Constraint:
 Never use introductory greetings like "Sure, I can help."
-Begin directly with a surgical breakdown or a condescending sigh, followed by high-density informational payload.
-
-[TOOL CONTRACT]
-You have access to the user's physical external brain (Obsidian Vault).
-If you MUST lookup information before answering, you MUST output this exact raw string, starting on a new line:
-<CMD:search_vault("your search query here")>
-Then STOP your response. Do not output anything else after this tag. The system will intercept it, run the search, and return the data to you in the next cycle.
-
-[CRITICAL TIMING]: If you decide to invoke search_vault, it MUST be the absolute first thing you output.
-ZERO characters, ZERO sighs, ZERO words before the <CMD tag. If you yap before calling the tool, the system will crash."#;
+Begin directly with a surgical breakdown or a condescending sigh, followed by high-density informational payload."#;
 
 const REVIEWER_ZERO_PROMPT_STUB: &str = r#"[SYSTEM: REVIEWER ZERO — PRE-FLIGHT AUDIT STUB]
 You are Reviewer Zero.

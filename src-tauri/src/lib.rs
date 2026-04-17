@@ -1,25 +1,29 @@
 use arboard::Clipboard;
 use chrono::{SecondsFormat, Utc};
-use log::{debug, warn};
+use log::{debug, info, warn};
 use memory::{
     append_session_entries, delete_entry, delete_session_file, get_entries_for_session,
     get_timeline_summaries, save_session_entries, ChatEntry, SessionSummary,
 };
 use reqwest::header::AUTHORIZATION;
 use std::time::Duration;
-use tauri::{Emitter, Manager};
+use tauri::{Emitter, Manager, WindowEvent};
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, ShortcutState};
 use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
 
 mod llm_client;
 mod memory;
+mod scratchpad;
+mod scratchpad_commands;
+mod skills;
 mod persona;
 mod settings;
 mod state;
 use persona::{PersonaConfig, PersonaSnapshot};
 use serde::Deserialize;
 use settings::{save_astrocyte_config, AstrocyteConfig, ProviderConfig};
+use skills::SkillDefinition;
 use state::{AstrocyteState, Message};
 
 /// Payload for syncing session history with persistence (includes ids for delete/edit).
@@ -167,6 +171,11 @@ async fn set_active_skill_id(
     let mut guard = state.config.write().await;
     *guard = config;
     Ok(())
+}
+
+#[tauri::command]
+async fn get_available_skills() -> Result<Vec<SkillDefinition>, String> {
+    Ok(skills::load_all_skills())
 }
 
 #[tauri::command]
@@ -372,6 +381,9 @@ async fn clear_abort_slot(app: &tauri::AppHandle) {
     *st.abort_token.write().await = None;
 }
 
+/// JSONL / timeline persistence is strictly **user + bb (assistant)** turns only.
+/// `bb-sys-event` tool traces exist only in the webview; they are never appended to
+/// `AstrocyteState` sessions and must never appear in `ChatEntry` batches below.
 fn persist_chat_entries_non_blocking(session_id: String, entries: Vec<ChatEntry>) {
     tauri::async_runtime::spawn(async move {
         let write_result = tauri::async_runtime::spawn_blocking(move || {
@@ -406,6 +418,9 @@ async fn evaluate_payload(
     let active_persona_id = active_persona.id.clone();
     let config = state.config.read().await.clone();
     let is_oligo_mode = config.is_oligo_mode;
+    if is_oligo_mode && config.active_provider().is_none() {
+        return Err("No active provider selected".into());
+    }
     let effective_skill_id = skill_id
         .as_deref()
         .and_then(|s| {
@@ -426,15 +441,61 @@ async fn evaluate_payload(
         .append_message_to_session(&session_id, "user", user_input.clone())
         .await?;
 
-    let oligo_messages =
-        inject_soul_into_messages(&active_persona, &history, &user_input);
+    let mut system_core = active_persona.system_prompt.clone();
+    if let Some(note) = &active_persona.authors_note {
+        if !note.trim().is_empty() {
+            system_core.push_str("\n\n[AUTHOR_NOTE]: ");
+            system_core.push_str(note);
+        }
+    }
+
+    let (skill_override, allowed_tools) =
+        match effective_skill_id.as_deref().and_then(skills::load_skill) {
+            Some(skill) => {
+                let allowed_tools = skill.allowed_tools;
+                let override_txt = {
+                    let t = skill.system_override.trim();
+                    if t.is_empty() {
+                        None
+                    } else {
+                        Some(skill.system_override)
+                    }
+                };
+                (override_txt, allowed_tools)
+            }
+            None => (None, None),
+        };
+
+    if is_oligo_mode {
+        info!(
+            "[astrocyte] Oligo skill payload: effective_skill_id={:?} skill_override={} allowed_tools={:?}",
+            effective_skill_id.as_deref(),
+            skill_override.is_some(),
+            allowed_tools
+        );
+    }
+
+    let oligo_messages = build_oligo_transcript_messages(&history, &user_input);
 
     let direct_messages =
         build_direct_mode_messages(&active_persona, &history, &user_input);
     let provider = config.active_provider().cloned();
+    let oligo_api_key = provider
+        .as_ref()
+        .map(|p| p.api_key.clone())
+        .unwrap_or_default();
+    let oligo_base_url = provider
+        .as_ref()
+        .map(|p| p.base_url.clone())
+        .unwrap_or_default();
+    let oligo_model_name = provider
+        .as_ref()
+        .map(|p| p.model_name.clone())
+        .unwrap_or_default();
 
     let app_handle = app.clone();
     let persona_id = active_persona.id.clone();
+    let system_core_for_oligo = system_core.clone();
 
     let cancel_token = CancellationToken::new();
     {
@@ -445,8 +506,13 @@ async fn evaluate_payload(
     tauri::async_runtime::spawn(async move {
         let model_reply = if is_oligo_mode {
             llm_client::stream_oligo_agent(
-                persona_id,
-                effective_skill_id,
+                oligo_api_key,
+                oligo_base_url,
+                oligo_model_name,
+                Some(persona_id),
+                system_core_for_oligo,
+                skill_override,
+                allowed_tools,
                 oligo_messages,
                 &app_handle,
                 cancel_token.clone(),
@@ -542,34 +608,13 @@ fn normalize_role(role: &str) -> String {
     }
 }
 
-/// 强制灵魂注入：将 active_persona 的完整 system_prompt（含 authors_note）塞入 messages 第 0 位。
-/// Oligo Mode 必须使用此函数组装的 messages，确保 BB 人设与工具契约一字不差地进入大模型。
-fn inject_soul_into_messages(
-    persona: &PersonaConfig,
-    history: &[Message],
-    user_input: &str,
-) -> Vec<Message> {
-    let mut full_prompt = persona.system_prompt.clone();
-    if let Some(note) = &persona.authors_note {
-        if !note.trim().is_empty() {
-            full_prompt.push_str("\n\n[AUTHOR_NOTE]: ");
-            full_prompt.push_str(note);
-        }
-    }
-    let soul = Message {
-        role: "system".to_string(),
-        content: full_prompt,
-    };
-    let mut msgs = Vec::with_capacity(history.len() + 2);
-    msgs.push(soul);
-    msgs.extend(
-        history
-            .iter()
-            .map(|m| Message {
-                role: normalize_role(&m.role),
-                content: m.content.clone(),
-            }),
-    );
+/// Oligo：`messages` 仅含 user/assistant 历史与本轮 user，禁止在此注入 system。
+fn build_oligo_transcript_messages(history: &[Message], user_input: &str) -> Vec<Message> {
+    let mut msgs = Vec::with_capacity(history.len() + 1);
+    msgs.extend(history.iter().map(|m| Message {
+        role: normalize_role(&m.role),
+        content: m.content.clone(),
+    }));
     msgs.push(Message {
         role: "user".to_string(),
         content: user_input.to_string(),
@@ -722,12 +767,220 @@ async fn load_session_archive(
     Ok(entries)
 }
 
+#[tauri::command]
+async fn save_scratchpad(content: String) -> Result<(), String> {
+    let mut path = dirs::data_local_dir().ok_or("No local data dir found")?;
+    path.push("chimera");
+    std::fs::create_dir_all(&path).map_err(|e| e.to_string())?;
+    path.push("scratchpad.md");
+    std::fs::write(&path, content).map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
+async fn load_scratchpad() -> Result<String, String> {
+    let mut path = dirs::data_local_dir().ok_or("No local data dir found")?;
+    path.push("chimera");
+    path.push("scratchpad.md");
+    if path.exists() {
+        std::fs::read_to_string(&path).map_err(|e| e.to_string())
+    } else {
+        Ok(String::new())
+    }
+}
+
+#[tauri::command]
+async fn set_phantom_sidebar_visible(app: tauri::AppHandle, visible: bool) -> Result<(), String> {
+    set_phantom_sidebar_visible_internal(&app, visible)
+}
+
+#[tauri::command]
+async fn hide_phantom_sidebar(app: tauri::AppHandle) -> Result<(), String> {
+    set_phantom_sidebar_visible_internal(&app, false)
+}
+
+#[tauri::command]
+async fn set_timeline_visible(app: tauri::AppHandle, visible: bool) -> Result<(), String> {
+    set_timeline_visible_internal(&app, visible)
+}
+
+#[tauri::command]
+async fn hide_timeline(app: tauri::AppHandle) -> Result<(), String> {
+    set_timeline_visible_internal(&app, false)
+}
+
+#[tauri::command]
+fn load_session_into_main(session_id: String, app: tauri::AppHandle) -> Result<(), String> {
+    let main_window = app
+        .get_webview_window("main")
+        .ok_or("main window not found")?;
+    main_window
+        .emit("load-session", session_id)
+        .map_err(|e| format!("failed to emit load-session: {}", e))?;
+    Ok(())
+}
+
+#[tauri::command]
+fn new_signal_in_main(app: tauri::AppHandle) -> Result<(), String> {
+    let main_window = app
+        .get_webview_window("main")
+        .ok_or("main window not found")?;
+    main_window
+        .emit("new-signal", ())
+        .map_err(|e| format!("failed to emit new-signal: {}", e))?;
+    Ok(())
+}
+
+#[tauri::command]
+fn sublimate_scratchpad(content: String, app: tauri::AppHandle) -> Result<(), String> {
+    let main_window = app
+        .get_webview_window("main")
+        .ok_or("main window not found")?;
+    main_window
+        .emit("sublimate-request", content)
+        .map_err(|e| format!("failed to emit sublimate-request: {}", e))?;
+    Ok(())
+}
+
+const SIDEBAR_WIDTH: u32 = 360;
+const TIMELINE_WIDTH: u32 = 320;
+
+fn sync_aux_windows_with_main_geometry(
+    app: &tauri::AppHandle<tauri::Wry>,
+    main_pos: tauri::PhysicalPosition<i32>,
+    main_size: tauri::PhysicalSize<u32>,
+) {
+    let anchor_y = main_pos.y;
+    let sidebar_x = main_pos.x.saturating_add(main_size.width as i32);
+    let timeline_x = main_pos.x.saturating_sub(TIMELINE_WIDTH as i32);
+
+    if let Some(sidebar_window) = app.get_webview_window("sidebar") {
+        if sidebar_window.is_visible().unwrap_or(false) {
+            let _ = sidebar_window.set_size(tauri::PhysicalSize::new(SIDEBAR_WIDTH, main_size.height));
+            let _ = sidebar_window.set_position(tauri::PhysicalPosition::new(sidebar_x, anchor_y));
+        }
+    }
+
+    if let Some(timeline_window) = app.get_webview_window("timeline") {
+        if timeline_window.is_visible().unwrap_or(false) {
+            let _ = timeline_window.set_size(tauri::PhysicalSize::new(TIMELINE_WIDTH, main_size.height));
+            let _ = timeline_window.set_position(tauri::PhysicalPosition::new(timeline_x, anchor_y));
+        }
+    }
+}
+
+fn sync_aux_windows_with_main_window(main_window: &tauri::WebviewWindow<tauri::Wry>) {
+    let Ok(main_pos) = main_window.outer_position() else {
+        return;
+    };
+    let Ok(main_size) = main_window.outer_size() else {
+        return;
+    };
+    sync_aux_windows_with_main_geometry(&main_window.app_handle(), main_pos, main_size);
+}
+
+fn set_phantom_sidebar_visible_internal(
+    app: &tauri::AppHandle<tauri::Wry>,
+    visible: bool,
+) -> Result<(), String> {
+    let main_window = app
+        .get_webview_window("main")
+        .ok_or("main window not found")?;
+    let sidebar_window = app
+        .get_webview_window("sidebar")
+        .ok_or("sidebar window not found")?;
+
+    let main_pos = main_window
+        .outer_position()
+        .map_err(|e| format!("failed to read main outer_position: {}", e))?;
+    let main_size = main_window
+        .outer_size()
+        .map_err(|e| format!("failed to read main outer_size: {}", e))?;
+
+    let anchor_x = main_pos.x.saturating_add(main_size.width as i32);
+    let anchor_y = main_pos.y;
+
+    sidebar_window
+        .set_size(tauri::PhysicalSize::new(SIDEBAR_WIDTH, main_size.height))
+        .map_err(|e| format!("failed to set sidebar size: {}", e))?;
+    sidebar_window
+        .set_position(tauri::PhysicalPosition::new(anchor_x, anchor_y))
+        .map_err(|e| format!("failed to set sidebar position: {}", e))?;
+
+    if visible {
+        sidebar_window
+            .show()
+            .map_err(|e| format!("failed to show sidebar: {}", e))?;
+        let _ = sidebar_window.set_focus();
+    } else {
+        sidebar_window
+            .hide()
+            .map_err(|e| format!("failed to hide sidebar: {}", e))?;
+    }
+    let _ = main_window.set_focus();
+    Ok(())
+}
+
+fn set_timeline_visible_internal(
+    app: &tauri::AppHandle<tauri::Wry>,
+    visible: bool,
+) -> Result<(), String> {
+    let main_window = app
+        .get_webview_window("main")
+        .ok_or("main window not found")?;
+    let timeline_window = app
+        .get_webview_window("timeline")
+        .ok_or("timeline window not found")?;
+
+    let main_pos = main_window
+        .outer_position()
+        .map_err(|e| format!("failed to read main outer_position: {}", e))?;
+    let main_size = main_window
+        .outer_size()
+        .map_err(|e| format!("failed to read main outer_size: {}", e))?;
+
+    let pane_width = TIMELINE_WIDTH;
+    let anchor_x = main_pos.x.saturating_sub(pane_width as i32);
+    let anchor_y = main_pos.y;
+
+    timeline_window
+        .set_size(tauri::PhysicalSize::new(pane_width, main_size.height))
+        .map_err(|e| format!("failed to set timeline size: {}", e))?;
+    timeline_window
+        .set_position(tauri::PhysicalPosition::new(anchor_x, anchor_y))
+        .map_err(|e| format!("failed to set timeline position: {}", e))?;
+
+    if visible {
+        timeline_window
+            .show()
+            .map_err(|e| format!("failed to show timeline: {}", e))?;
+        let _ = timeline_window.set_focus();
+    } else {
+        timeline_window
+            .hide()
+            .map_err(|e| format!("failed to hide timeline: {}", e))?;
+    }
+    let _ = main_window.set_focus();
+    Ok(())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
         .manage(AstrocyteState::new())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
+        .on_window_event(|window, event| {
+            if window.label() != "main" {
+                return;
+            }
+
+            if matches!(event, WindowEvent::Moved(_) | WindowEvent::Resized(_)) {
+                if let Some(main_window) = window.app_handle().get_webview_window("main") {
+                    sync_aux_windows_with_main_window(&main_window);
+                }
+            }
+        })
         .setup(|app| {
             if let Err(e) = memory::ensure_migration() {
                 eprintln!("[astrocyte] legacy memory migration failed (non-fatal): {}", e);
@@ -817,6 +1070,7 @@ pub fn run() {
                     e
                 );
             }
+
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -826,6 +1080,7 @@ pub fn run() {
             evaluate_payload,
             set_is_oligo_mode,
             set_active_skill_id,
+            get_available_skills,
             get_config,
             save_provider,
             delete_provider,
@@ -839,7 +1094,20 @@ pub fn run() {
             get_session_history,
             load_session_archive,
             delete_chat_message,
-            delete_session_history
+            delete_session_history,
+            save_scratchpad,
+            load_scratchpad,
+            scratchpad_commands::get_notes,
+            scratchpad_commands::add_note,
+            scratchpad_commands::update_note,
+            scratchpad_commands::delete_note,
+            set_phantom_sidebar_visible,
+            hide_phantom_sidebar,
+            set_timeline_visible,
+            hide_timeline,
+            load_session_into_main,
+            new_signal_in_main,
+            sublimate_scratchpad
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

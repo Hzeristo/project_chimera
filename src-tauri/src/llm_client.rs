@@ -28,11 +28,19 @@ struct OpenAiChatRequest {
     stream: bool,
 }
 
+/// 与 Oligo `AgentInvokeRequest`（Pydantic）字段对齐的物理装填包。
 #[derive(Serialize)]
 struct OligoAgentRequest {
-    persona_id: String,
+    api_key: String,
+    base_url: String,
+    model_name: String,
     #[serde(skip_serializing_if = "Option::is_none")]
-    skill_id: Option<String>,
+    persona_id: Option<String>,
+    system_core: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    skill_override: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    allowed_tools: Option<Vec<String>>,
     messages: Vec<OligoMessage>,
 }
 
@@ -141,9 +149,16 @@ pub async fn stream_direct_api(
 }
 
 /// Agentic 模式：EventSource 解析 SSE，data 帧内容全透传 emit。
+/// `api_key` / `base_url` / `model_name` 来自当前 Provider；`system_core` / `skill` 零件由调用方装配；
+/// `messages` 仅含 user/assistant 与本轮 user，禁止预拼 System。
 pub async fn stream_oligo_agent(
-    persona_id: String,
-    skill_id: Option<String>,
+    api_key: String,
+    base_url: String,
+    model_name: String,
+    persona_id: Option<String>,
+    system_core: String,
+    skill_override: Option<String>,
+    allowed_tools: Option<Vec<String>>,
     messages: Vec<Message>,
     app_handle: &AppHandle,
     cancel_token: CancellationToken,
@@ -154,8 +169,13 @@ pub async fn stream_oligo_agent(
         .map_err(|e| format!("reqwest client build failed: {}", e))?;
 
     let body = OligoAgentRequest {
+        api_key,
+        base_url,
+        model_name,
         persona_id,
-        skill_id,
+        system_core,
+        skill_override,
+        allowed_tools,
         messages: messages
             .iter()
             .map(|m| OligoMessage {

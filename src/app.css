@@ -1,8 +1,19 @@
+@import url('https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500&family=Inter:wght@400;500;600&family=JetBrains+Mono:ital,wght@0,400;0,500;0,600;1,400&display=swap');
+
 :root {
   color-scheme: dark;
-  font-family: "Fira Code", "JetBrains Mono", "Cascadia Mono", "Consolas", monospace;
+  /* 正文：中英混排可读性；不等宽 */
+  --font-body: 'Inter', -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif;
+  /* 系统遥测 / 信道标签 / 输入轨：等宽霸权 */
+  --font-mono: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace;
+  --astrocyte-font-sans: var(--font-body);
+  --astrocyte-font-mono: var(--font-mono);
   --astrocyte-neural-purple: #bb9af7;
   --astrocyte-neural-purple-dim: rgba(187, 154, 247, 0.35);
+  --astrocyte-bb-fg: #d3b8ff;
+  --astrocyte-user-fg: #94a3b8;
+  --astrocyte-read-fg: #e2e8f0;
+  --astrocyte-read-fg-muted: #94a3b8;
 }
 
 html,
@@ -12,11 +23,100 @@ body {
   width: 100%;
   height: 100%;
   background-color: rgba(15, 15, 20, 0.8);
-  color: #bb9af7;
+  font-family: var(--font-body);
+  color: #d4d4d4;
 }
 
 body {
   overflow: hidden;
+}
+
+/* Timeline Webview: kill app.css html/body chrome so the OS glass stays truly empty */
+html.timeline-route-host {
+  color-scheme: dark;
+}
+
+html.timeline-route-host,
+html.timeline-route-host body {
+  background-color: transparent !important;
+  background: transparent !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  box-shadow: none !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  overflow: hidden !important;
+  pointer-events: none !important;
+}
+
+/* Sidebar fade container */
+.fade-container {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.3s ease;
+}
+
+.fade-container.visible {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+/* ─── Monospace domain: 顶栏信道、输入轨、时间轴时间码、侧栏番茄钟 ─── */
+.hud-header {
+  font-family: var(--font-mono);
+}
+
+.hud-input-wrap {
+  font-family: var(--font-mono);
+}
+
+.hud-input-wrap .hud-input {
+  font-family: var(--font-mono);
+  line-height: 1.45;
+}
+
+.hud-input-wrap .hud-input::placeholder {
+  font-family: var(--font-mono);
+  letter-spacing: 0.02em;
+}
+
+.hud-input-wrap .persona-quick-switch,
+.hud-input-wrap .persona-quick-select {
+  font-family: var(--font-mono);
+}
+
+.sidebar-timer {
+  font-family: var(--font-mono);
+}
+
+/* Sidebar: Memory Matrix — 纵向列表平滑滚动且不显示滚动条 */
+.sidebar-memory-matrix-scroll {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.sidebar-memory-matrix-scroll::-webkit-scrollbar {
+  display: none;
+  width: 0;
+  height: 0;
+}
+
+.timeline-wrapper .tooltip .snippet {
+  font-family: var(--font-body);
+  line-height: 1.5;
+}
+
+/* Code & telemetry: always monospace */
+pre,
+code,
+kbd,
+samp {
+  font-family: var(--font-mono);
 }
 
 * {
@@ -41,17 +141,48 @@ body {
 input:-webkit-autofill,
 input:-webkit-autofill:hover,
 input:-webkit-autofill:focus {
-  -webkit-text-fill-color: #bb9af7;
+  -webkit-text-fill-color: #e2e8f0;
   transition: background-color 9999s ease-out 0s;
 }
 
-/* Global styles for markdown rendered via {@html}. */
+/* Chat: 正文 user/bb 用 Inter 栈 + 行高呼吸感；系统行保持终端等宽 */
+.hud-output article.msg-row .msg-content {
+  font-size: 14px;
+  color: var(--astrocyte-read-fg);
+}
+
+.hud-output article.msg-row .msg-content[data-sender='user'],
+.hud-output article.msg-row .msg-content[data-sender='bb'] {
+  font-family: var(--font-body);
+  line-height: 1.6;
+  letter-spacing: 0.015em;
+}
+
+.hud-output article.msg-row .msg-content[data-sender='user'] {
+  color: var(--astrocyte-user-fg);
+}
+
+.hud-output article.msg-row .msg-content[data-sender='bb'] {
+  color: var(--astrocyte-bb-fg);
+  text-shadow: 0 0 18px rgba(187, 154, 247, 0.12);
+}
+
+.hud-output article.msg-row .msg-content[data-sender='system'] {
+  font-family: var(--font-mono);
+  line-height: 1.5;
+  letter-spacing: 0.04em;
+  font-size: 13px;
+  color: rgba(187, 154, 247, 0.82);
+}
+
 .hud-output .msg-content p {
-  margin-top: 0.25em;
-  margin-bottom: 1em;
+  margin-top: 0.35em;
+  margin-bottom: 1.25em;
 }
 
 .hud-output .msg-content code {
+  font-family: var(--font-mono);
+  letter-spacing: 0;
   background: rgba(187, 154, 247, 0.15);
   color: #d3b8ff;
   border-radius: 3px;
@@ -65,6 +196,9 @@ input:-webkit-autofill:focus {
   border-radius: 6px;
   overflow-x: auto;
   border: 1px solid rgba(187, 154, 247, 0.2);
+  font-family: var(--font-mono);
+  letter-spacing: 0;
+  line-height: 1.5;
 }
 
 .hud-output .msg-content pre code {
@@ -73,6 +207,8 @@ input:-webkit-autofill:focus {
   color: inherit;
   border-radius: 0;
   padding: 0;
+  font-family: var(--font-mono);
+  letter-spacing: 0;
 }
 
 .hud-output .msg-content .katex {
@@ -101,8 +237,13 @@ input:-webkit-autofill:focus {
   -webkit-app-region: no-drag;
 }
 
+.hud-header-brand {
+  font-family: var(--font-mono);
+  letter-spacing: 0.1em;
+}
+
 .fire-selector {
-  font: inherit;
+  font-family: var(--font-mono);
   font-size: 10px;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -136,64 +277,259 @@ input:-webkit-autofill:focus {
     0 0 28px rgba(150, 100, 255, 0.45);
 }
 
-/* System log: plain DOM, bypasses markdown — isolate from BB/user chunks */
+/* Oligo tool trace: scan-line telemetry — no panel chrome, monospace glow + breath */
 .system-log-raw {
+  --system-log-fg: #7aa2f7;
+  --system-log-glow: rgba(122, 162, 247, 0.35);
+  position: relative;
   display: block;
   width: 100%;
-  margin-top: 1rem;
-  margin-bottom: 1rem;
-  padding: 8px;
-  background: rgba(20, 20, 25, 0.9);
-  border-left: 2px solid #bb9af7;
-  color: #888;
-  font-size: 0.85em;
-  font-family: monospace;
+  margin: 0.85rem 0 1rem;
+  padding: 0.15rem 0 0.15rem 0.35rem;
+  border: none;
+  background: transparent;
+  color: var(--system-log-fg);
+  font-size: 0.8rem;
+  line-height: 1.45;
+  font-family: var(--font-mono);
+  letter-spacing: 0.04em;
   white-space: pre-wrap;
+  word-break: break-word;
   clear: both;
+  text-shadow:
+    0 0 6px var(--system-log-glow),
+    0 0 14px rgba(137, 220, 235, 0.12);
+  animation: system-log-scan-breathe 2.8s ease-in-out infinite;
 }
 
-/* Emergency stop — visible only while generation is in flight */
-.signal-abort-btn {
+.system-log-raw::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: linear-gradient(
+    180deg,
+    transparent,
+    rgba(137, 220, 235, 0.35) 35%,
+    rgba(122, 162, 247, 0.55) 50%,
+    rgba(137, 220, 235, 0.25) 65%,
+    transparent
+  );
+  opacity: 0.65;
+  pointer-events: none;
+}
+
+.system-log-raw::after {
+  content: '_';
+  display: inline-block;
+  margin-left: 0.15em;
+  color: rgba(137, 220, 235, 0.85);
+  font-weight: 400;
+  animation: system-log-cursor-blink 0.88s step-end infinite;
+}
+
+.system-log-raw .system-log-glyph,
+.system-log-raw .system-log-label,
+.system-log-raw .system-log-payload-dim,
+.system-log-raw .system-log-fallback {
+  font-family: var(--font-mono);
+}
+
+.system-log-glyph {
+  margin-right: 0.35em;
+  color: rgba(137, 220, 235, 0.42);
+  font-weight: 500;
+  letter-spacing: 0.02em;
+}
+
+.system-log-label {
+  color: #89dceb;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-shadow:
+    0 0 8px rgba(137, 220, 235, 0.35),
+    0 0 12px rgba(122, 162, 247, 0.2);
+}
+
+.system-log-payload-dim {
+  color: rgba(122, 162, 247, 0.42);
+  font-weight: 400;
+  text-shadow: none;
+}
+
+.system-log-fallback {
+  color: rgba(122, 162, 247, 0.78);
+  font-weight: 400;
+}
+
+@keyframes system-log-scan-breathe {
+  0%,
+  100% {
+    opacity: 0.62;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+@keyframes system-log-cursor-blink {
+  0%,
+  49% {
+    opacity: 1;
+  }
+  50%,
+  100% {
+    opacity: 0.12;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .system-log-raw {
+    animation: none;
+    opacity: 0.92;
+  }
+
+  .system-log-raw::after {
+    animation: none;
+    opacity: 0.7;
+  }
+}
+
+/* Session HUD lines & timeline stamps — rack-clock monospace */
+.archive-banner {
+  font-family: var(--font-mono);
+  letter-spacing: 0.1em;
+}
+
+.timeline-wrapper .tooltip .time {
+  font-family: var(--font-mono);
+  letter-spacing: 0.06em;
+}
+
+/* Timeline absolute-void guard: keep outer physical area fully transparent */
+.fade-container {
+  background: transparent !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  box-shadow: none !important;
+}
+
+html.timeline-route-host .fade-container {
+  background-color: transparent !important;
+  background: transparent !important;
+}
+
+/* Timeline window only: .fade-container.visible must NOT steal clicks on the wide transparent glass */
+html.timeline-route-host .fade-container.visible {
+  pointer-events: none !important;
+}
+
+/* Critical override — idle: concealed slash glyph; hover: sever-connection bloom + jitter */
+.override-guillotine {
   flex-shrink: 0;
   align-self: flex-end;
   margin-bottom: 10px;
-  padding: 8px 12px;
-  border: 1px solid rgba(255, 51, 51, 0.55);
-  border-radius: 4px;
-  background: linear-gradient(180deg, rgba(40, 8, 8, 0.95), rgba(18, 4, 4, 0.98));
-  color: #ff3333;
-  font: inherit;
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  min-width: 2.75rem;
+  min-height: 1.35rem;
+  padding: 4px 2px;
+  border: none;
+  background: transparent;
   cursor: pointer;
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  -webkit-app-region: no-drag;
+}
+
+.override-guillotine__idle {
+  display: inline-block;
+  color: #8b0000;
   text-shadow:
-    0 0 6px rgba(255, 51, 51, 0.55),
-    0 0 14px rgba(255, 30, 30, 0.35);
-  box-shadow:
-    0 0 0 1px rgba(0, 0, 0, 0.4),
-    0 0 12px rgba(255, 51, 51, 0.18);
+    0 0 3px rgba(139, 0, 0, 0.45),
+    0 0 8px rgba(90, 0, 0, 0.35);
+  opacity: 1;
+  transform: scale(1);
   transition:
-    border-color 140ms ease,
-    color 140ms ease,
-    box-shadow 140ms ease,
-    text-shadow 140ms ease;
+    opacity 0.2s ease,
+    transform 0.22s cubic-bezier(0.4, 0, 0.2, 1),
+    filter 0.2s ease;
+  white-space: nowrap;
 }
 
-.signal-abort-btn:hover {
-  border-color: rgba(255, 80, 80, 0.95);
-  color: #ff5555;
-  box-shadow:
-    0 0 0 1px rgba(255, 51, 51, 0.25),
-    0 0 18px rgba(255, 51, 51, 0.42);
+.override-guillotine__hot {
+  position: absolute;
+  right: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  display: inline-block;
+  white-space: nowrap;
+  color: #ff1520;
+  opacity: 0;
+  max-width: 0;
+  overflow: hidden;
+  pointer-events: none;
   text-shadow:
-    0 0 8px rgba(255, 90, 90, 0.85),
-    0 0 20px rgba(255, 40, 40, 0.5);
+    0 0 6px rgba(255, 20, 40, 0.55),
+    0 0 14px rgba(200, 0, 30, 0.4);
+  transition:
+    opacity 0.22s ease,
+    max-width 0.32s cubic-bezier(0.22, 1, 0.36, 1),
+    filter 0.2s ease;
+  animation: none;
 }
 
-.signal-abort-btn:active {
-  transform: translateY(1px);
+.override-guillotine:hover .override-guillotine__idle,
+.override-guillotine:focus-visible .override-guillotine__idle {
+  opacity: 0;
+  transform: scale(0.92);
+  pointer-events: none;
+}
+
+.override-guillotine:hover .override-guillotine__hot,
+.override-guillotine:focus-visible .override-guillotine__hot {
+  opacity: 1;
+  max-width: 22rem;
+  pointer-events: auto;
+  animation: override-guillotine-jitter 0.14s ease-in-out infinite;
+}
+
+.override-guillotine:focus-visible {
+  outline: 1px solid rgba(255, 30, 40, 0.4);
+  outline-offset: 2px;
+}
+
+.override-guillotine:active .override-guillotine__hot {
+  filter: brightness(1.15);
+}
+
+@keyframes override-guillotine-jitter {
+  0%,
+  100% {
+    text-shadow:
+      0.5px 0 5px rgba(255, 25, 35, 0.65),
+      -0.5px 0 6px rgba(255, 60, 70, 0.45),
+      0 0 12px rgba(180, 0, 20, 0.35);
+  }
+  33% {
+    text-shadow:
+      -0.5px 0 5px rgba(255, 35, 45, 0.7),
+      0.5px 0 7px rgba(255, 20, 30, 0.5),
+      0 0 14px rgba(220, 10, 30, 0.4);
+  }
+  66% {
+    text-shadow:
+      0 0.5px 6px rgba(255, 30, 40, 0.6),
+      0 -0.5px 5px rgba(255, 50, 60, 0.45),
+      0 0 10px rgba(160, 0, 25, 0.38);
+  }
 }
 
 /* Partial assistant text kept in UI after user abort — not written to JSONL */
@@ -207,6 +543,7 @@ input:-webkit-autofill:focus {
   content: ' // VOID_SNAPSHOT · NOT_PERSISTED';
   display: block;
   margin-top: 0.5em;
+  font-family: var(--font-mono);
   font-size: 0.72em;
   letter-spacing: 0.06em;
   color: rgba(255, 51, 51, 0.65);

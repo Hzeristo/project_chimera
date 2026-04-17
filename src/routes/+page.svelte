@@ -31,6 +31,7 @@
     active_provider_id: string | null;
     providers: ProviderConfig[];
     is_oligo_mode: boolean;
+    active_skill_id?: string | null;
   };
   type PersonaConfig = {
     id: string;
@@ -42,6 +43,13 @@
     active_persona_id: string;
     personas: PersonaConfig[];
   };
+  type SkillDefinition = {
+    id: string;
+    name: string;
+    system_override: string;
+    allowed_tools?: string[] | null;
+  };
+  type TelemetryLine = { id: string; html: string; settled: boolean };
   type BackendMessage = {
     role: string;
     content: string;
@@ -83,7 +91,8 @@
   let sessionSummaries: SessionSummary[] = [];
   let history_sessions: TimelineNode[] = [];
   let viewingArchive: SessionSummary | null = null;
-  let isTimelineOpen = false;
+  let phantomHoverTimeout: ReturnType<typeof setTimeout> | null = null;
+  let timelineHoverTimeout: ReturnType<typeof setTimeout> | null = null;
   let inputSignal = '';
   let inputEl: HTMLTextAreaElement | null = null;
   let outputEl: HTMLElement | null = null;
@@ -92,10 +101,15 @@
   let isGenerating = false;
   let pendingChunkBuffer = '';
   let pendingFlushFrame: number | null = null;
+  /** First non-empty BB stream chunk: purge ephemeral `system_log` rows from the canvas. */
+  let pendingStripSystemLogsOnFirstChunk = false;
   let unlistenClipboardHijack: (() => void) | null = null;
   let unlistenBBChunk: (() => void) | null = null;
   let unlistenBBSysEvent: (() => void) | null = null;
   let unlistenBBDone: (() => void) | null = null;
+  let unlistenSublimateRequest: (() => void) | null = null;
+  let unlistenLoadSession: (() => void) | null = null;
+  let unlistenNewSignal: (() => void) | null = null;
   let editTextareaEl: HTMLTextAreaElement | null = null;
   const markdownCache = new Map<string, { text: string; html: string }>();
 
@@ -104,7 +118,12 @@
   let settingsError = '';
   let settingsStatus = '';
   let settingsTab: 'provider' | 'persona' = 'provider';
-  let config: AstrocyteConfig = { active_provider_id: null, providers: [], is_oligo_mode: false };
+  let config: AstrocyteConfig = {
+    active_provider_id: null,
+    providers: [],
+    is_oligo_mode: false,
+    active_skill_id: null,
+  };
   let selectedProviderId: string | null = null;
   let providerDraft: ProviderConfig = {
     id: makeId(),
@@ -128,6 +147,15 @@
   let personaStatus = '';
   let personaError = '';
   let activePersonaName = 'BB (Default)';
+
+  let availableSkills: SkillDefinition[] = [];
+  let activeSkillId: string | null = null;
+  $: activeSkillId = activeSkillId === '' ? null : activeSkillId;
+  /** Oligo tool traces: sticky telemetry strip, not chat bubbles. */
+  let telemetryLines: TelemetryLine[] = [];
+  $: activeSkillDisplayName = activeSkillId
+    ? availableSkills.find((s) => s.id === activeSkillId)?.name ?? null
+    : null;
 
   let editingMessageId: string | null = null;
   let editBuffer = '';
@@ -206,6 +234,101 @@
     return html;
   }
 
+  /** Escape for inline HTML inside controlled spans (system_log beautifier). */
+  function escapeHtmlPlain(s: string): string {
+    return s
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  }
+
+  /**
+   * Oligo `bb-sys-event` payload (already stripped of `__SYS_TOOL_CALL__` on the wire in some paths).
+   * Renders as a single cyber line: `[SYSTEM] Accessing vault: search_vault("…")…`
+   */
+  function formatTelemetryHtml(payload: string): string {
+    const t = payload.trim();
+    if (!t) {
+      return DOMPurify.sanitize(
+        `<span class="system-telemetry-prefix">[SYSTEM]</span> <span class="system-telemetry-cmd">(empty)</span>`,
+        { ALLOWED_TAGS: ['span'], ALLOWED_ATTR: ['class'] }
+      );
+    }
+    let inner: string;
+    if (t.startsWith('parallel::')) {
+      const rest = t.slice('parallel::'.length).trim();
+      inner =
+        `<span class="system-telemetry-prefix">[SYSTEM]</span> ` +
+        `<span class="system-telemetry-cmd">${escapeHtmlPlain(`Parallel dispatch · ${rest}`)}</span>`;
+    } else if (t.startsWith('wash::')) {
+      const rest = t.slice('wash::'.length).trim();
+      inner =
+        `<span class="system-telemetry-prefix">[SYSTEM]</span> ` +
+        `<span class="system-telemetry-cmd">${escapeHtmlPlain(rest)}</span>`;
+    } else {
+      const sep = '::';
+      const idx = t.indexOf(sep);
+      if (idx === -1) {
+        inner =
+          `<span class="system-telemetry-prefix">[SYSTEM]</span> ` +
+          `<span class="system-telemetry-cmd">${escapeHtmlPlain(t)}</span>`;
+      } else {
+        const tool = t.slice(0, idx);
+        const rawArgs = t.slice(idx + sep.length).trim();
+        let display: string;
+        try {
+          const j = JSON.parse(rawArgs) as Record<string, unknown>;
+          if (tool === 'search_vault' && typeof j.query === 'string') {
+            display = `Accessing vault: ${tool}(${JSON.stringify(j.query)})`;
+          } else if (tool === 'search_vault_attribute' && typeof j.key === 'string') {
+            const v = typeof j.value === 'string' ? j.value : '';
+            display = `Accessing vault: ${tool}(key: ${JSON.stringify(j.key)}, value: ${JSON.stringify(v)})`;
+          } else {
+            display = `${tool}(${JSON.stringify(j)})`;
+          }
+        } catch {
+          const short = rawArgs.length > 140 ? `${rawArgs.slice(0, 140)}…` : rawArgs;
+          display = `${tool}(${short})`;
+        }
+        inner =
+          `<span class="system-telemetry-prefix">[SYSTEM]</span> ` +
+          `<span class="system-telemetry-cmd">${escapeHtmlPlain(`${display}…`)}</span>`;
+      }
+    }
+    return DOMPurify.sanitize(inner, { ALLOWED_TAGS: ['span'], ALLOWED_ATTR: ['class'] });
+  }
+
+  const SYSTEM_LOG_TOOL_LABELS: Record<string, string> = {
+    search_vault: '[ACCESSING VAULT]',
+  };
+
+  /**
+   * Turn harsh `System accessing: tool::{json}` lines into scan-line style HTML.
+   * Output is DOMPurify-sanitized (spans + class only).
+   */
+  function beautifySystemLogForDisplay(stored: string): string {
+    const stripped = stored.replace(/^\s*System accessing:\s*/i, '').trim();
+    const toolSep = /^([a-zA-Z0-9_]+)::([\s\S]*)$/;
+    const m = stripped.match(toolSep);
+
+    let inner: string;
+    if (m) {
+      const tool = m[1];
+      const args = m[2].trim();
+      const mapped = SYSTEM_LOG_TOOL_LABELS[tool];
+      const labelHtml = mapped ?? `[NEURAL_INSTR::${escapeHtmlPlain(tool)}]`;
+      inner = `<span class="system-log-glyph">&gt;&gt;</span><span class="system-log-label">${labelHtml}</span> <span class="system-log-payload-dim">${escapeHtmlPlain(args)}</span>`;
+    } else {
+      inner = `<span class="system-log-glyph">&gt;&gt;</span><span class="system-log-fallback">${escapeHtmlPlain(stripped)}</span>`;
+    }
+
+    return DOMPurify.sanitize(inner, {
+      ALLOWED_TAGS: ['span'],
+      ALLOWED_ATTR: ['class'],
+    });
+  }
+
   function toBackendHistory(entries: HistoryEntry[]): BackendMessage[] {
     return entries
       .filter(
@@ -274,6 +397,10 @@
     return 'system';
   }
 
+  function stripEphemeralSystemLogs(entries: HistoryEntry[]): HistoryEntry[] {
+    return entries.filter((m) => m.sender !== 'system_log');
+  }
+
   function clearTransientState() {
     editingMessageId = null;
     editBuffer = '';
@@ -281,6 +408,7 @@
     pendingAssistantMessageId = null;
     isGenerating = false;
     pendingChunkBuffer = '';
+    pendingStripSystemLogsOnFirstChunk = false;
     if (pendingFlushFrame !== null) {
       cancelAnimationFrame(pendingFlushFrame);
       pendingFlushFrame = null;
@@ -298,6 +426,7 @@
 
   async function loadSessionArchive(summary: SessionSummary) {
     clearTransientState();
+    telemetryLines = [];
     try {
       const archive = await invoke<SessionArchiveEntry[]>('load_session_archive', { sessionId: summary.id });
       history = archive.map((entry) => ({
@@ -319,6 +448,7 @@
 
   async function resetToNewSignal() {
     clearTransientState();
+    telemetryLines = [];
     history = [];
     activeSessionId = makeSessionId();
     viewingArchive = null;
@@ -415,7 +545,10 @@
       active_provider_id: nextConfig?.active_provider_id ?? null,
       providers: nextConfig?.providers ?? [],
       is_oligo_mode: nextConfig?.is_oligo_mode ?? false,
+      active_skill_id: nextConfig?.active_skill_id ?? null,
     };
+    const sid = (nextConfig?.active_skill_id ?? '').trim();
+    activeSkillId = sid === '' ? null : sid;
     if (selectedProviderId) {
       const selected = config.providers.find((provider) => provider.id === selectedProviderId);
       if (selected) {
@@ -661,6 +794,44 @@
     }
   }
 
+  function onPhantomTriggerEnter() {
+    if (phantomHoverTimeout !== null) {
+      clearTimeout(phantomHoverTimeout);
+      phantomHoverTimeout = null;
+    }
+    phantomHoverTimeout = setTimeout(() => {
+      phantomHoverTimeout = null;
+      void invoke('set_phantom_sidebar_visible', { visible: true }).catch((error) => {
+        console.error(error);
+      });
+    }, 300);
+  }
+
+  function onPhantomTriggerLeave() {
+    if (phantomHoverTimeout !== null) {
+      clearTimeout(phantomHoverTimeout);
+      phantomHoverTimeout = null;
+    }
+  }
+
+  function onTimelineTriggerEnter() {
+    if (timelineHoverTimeout !== null) {
+      clearTimeout(timelineHoverTimeout);
+      timelineHoverTimeout = null;
+    }
+    timelineHoverTimeout = setTimeout(() => {
+      timelineHoverTimeout = null;
+      void invoke('set_timeline_visible', { visible: true }).catch(console.error);
+    }, 300);
+  }
+
+  function onTimelineTriggerLeave() {
+    if (timelineHoverTimeout !== null) {
+      clearTimeout(timelineHoverTimeout);
+      timelineHoverTimeout = null;
+    }
+  }
+
   async function flushPendingChunk() {
     if (!pendingChunkBuffer || !currentBBMessageId) return;
     const mergedChunk = pendingChunkBuffer;
@@ -795,6 +966,8 @@
     currentBBMessageId = null;
     pendingAssistantMessageId = makeId();
     isGenerating = true;
+    pendingStripSystemLogsOnFirstChunk = true;
+    telemetryLines = [];
     await scrollToBottom();
 
     try {
@@ -803,6 +976,7 @@
         sessionId: activeSessionId,
         userMessageId: userMsgId,
         assistantMessageId: pendingAssistantMessageId,
+        skillId: activeSkillId,
       });
     } catch (error) {
       const errText = typeof error === 'string' ? error : 'Unknown gateway failure';
@@ -822,6 +996,8 @@
       currentBBMessageId = null;
       pendingAssistantMessageId = null;
       isGenerating = false;
+      pendingStripSystemLogsOnFirstChunk = false;
+      telemetryLines = telemetryLines.map((line) => ({ ...line, settled: true }));
     }
   }
 
@@ -831,18 +1007,21 @@
     if (index <= 0) return;
 
     let prevUser: HistoryEntry | null = null;
+    let prevUserIndex = -1;
     for (let i = index - 1; i >= 0; i -= 1) {
       if (history[i].sender === 'user') {
         prevUser = history[i];
+        prevUserIndex = i;
         break;
       }
     }
-    if (!prevUser) {
+    if (!prevUser || prevUserIndex < 0) {
       notifySystem('[RETRY_ABORTED] Cannot find previous user message.');
       return;
     }
 
-    history = history.slice(0, index);
+    // Cut through the last real user turn; drop this BB and any transient system_log in between.
+    history = history.slice(0, prevUserIndex + 1);
     try {
       await syncTimelineToBackend();
     } catch (error) {
@@ -879,6 +1058,13 @@
   onMount(async () => {
     await loadConfig();
     await loadPersonas();
+    try {
+      availableSkills = await invoke<SkillDefinition[]>('get_available_skills');
+    } catch (error) {
+      availableSkills = [];
+      const errText = typeof error === 'string' ? error : 'failed to load available skills';
+      notifySystem(`[SKILLS_LOAD_ERROR] ${errText}`);
+    }
     await refreshSessionHistory();
     await tick();
     if (inputEl) resetInputHeight();
@@ -900,6 +1086,10 @@
     unlistenBBChunk = await listen<string>('bb-stream-chunk', async (event) => {
       const fragment = typeof event.payload === 'string' ? event.payload : '';
       if (!fragment) return;
+      if (fragment.trim() && pendingStripSystemLogsOnFirstChunk) {
+        history = stripEphemeralSystemLogs(history);
+        pendingStripSystemLogsOnFirstChunk = false;
+      }
       ensureBBStreamEntry();
       queueBBChunk(fragment);
     });
@@ -908,17 +1098,14 @@
       const payload = typeof event.payload === 'string' ? event.payload : '';
       if (!payload.trim()) return;
       if (payload === '[Generation Aborted by User]') return;
-      history = [
-        ...history,
+      telemetryLines = [
+        ...telemetryLines,
         {
           id: makeId(),
-          sender: 'system_log',
-          text: `System accessing: ${payload}`,
-          timestamp: nowIso(),
-          persona: personaSnapshot.active_persona_id || DEFAULT_PERSONA,
+          html: formatTelemetryHtml(payload),
+          settled: false,
         },
       ];
-      currentBBMessageId = null;
       await scrollToBottom();
     });
 
@@ -946,7 +1133,10 @@
                 : msg
             );
           }
+          history = stripEphemeralSystemLogs(history);
+          telemetryLines = telemetryLines.map((line) => ({ ...line, settled: true }));
           isGenerating = false;
+          pendingStripSystemLogsOnFirstChunk = false;
           currentBBMessageId = null;
           pendingAssistantMessageId = null;
           await scrollToBottom();
@@ -966,13 +1156,34 @@
             };
           });
         }
+        history = stripEphemeralSystemLogs(history);
+        telemetryLines = telemetryLines.map((line) => ({ ...line, settled: true }));
         isGenerating = false;
+        pendingStripSystemLogsOnFirstChunk = false;
         currentBBMessageId = null;
         pendingAssistantMessageId = null;
         await scrollToBottom();
         await refreshSessionHistory();
       }
     );
+
+    unlistenSublimateRequest = await listen<string>('sublimate-request', async (event) => {
+      const payload = typeof event.payload === 'string' ? event.payload : '';
+      if (!payload.trim()) return;
+      inputSignal = '[System Direct: Please sublimate these notes]\n\n' + payload;
+      await tick();
+      void submitInput();
+    });
+
+    unlistenLoadSession = await listen<string>('load-session', async (event) => {
+      const sessionId = typeof event.payload === 'string' ? event.payload : '';
+      if (!sessionId.trim()) return;
+      await loadSession(sessionId);
+    });
+
+    unlistenNewSignal = await listen('new-signal', async () => {
+      await startNewSignal();
+    });
   });
 
   onDestroy(() => {
@@ -992,9 +1203,29 @@
       unlistenBBDone();
       unlistenBBDone = null;
     }
+    if (unlistenSublimateRequest) {
+      unlistenSublimateRequest();
+      unlistenSublimateRequest = null;
+    }
+    if (unlistenLoadSession) {
+      unlistenLoadSession();
+      unlistenLoadSession = null;
+    }
+    if (unlistenNewSignal) {
+      unlistenNewSignal();
+      unlistenNewSignal = null;
+    }
     if (pendingFlushFrame !== null) {
       cancelAnimationFrame(pendingFlushFrame);
       pendingFlushFrame = null;
+    }
+    if (phantomHoverTimeout !== null) {
+      clearTimeout(phantomHoverTimeout);
+      phantomHoverTimeout = null;
+    }
+    if (timelineHoverTimeout !== null) {
+      clearTimeout(timelineHoverTimeout);
+      timelineHoverTimeout = null;
     }
   });
 
@@ -1030,6 +1261,16 @@
     await activatePersona(nextId);
   }
 
+  async function onSkillSelect() {
+    const sid = activeSkillId && activeSkillId !== '' ? activeSkillId : null;
+    try {
+      await invoke('set_active_skill_id', { skillId: sid });
+    } catch (error) {
+      const errText = typeof error === 'string' ? error : 'failed to persist active skill';
+      notifySystem(`[SKILL_PERSIST_ERROR] ${errText}`);
+    }
+  }
+
   async function submitInput(event?: SubmitEvent) {
     event?.preventDefault();
     const message = inputSignal.trim();
@@ -1043,7 +1284,7 @@
 <main class="hud-shell">
   <div class="hud-main">
     <header class="hud-header" data-tauri-drag-region>
-      <span>[ BB_CHANNEL :: ASTROCYTE GATEWAY ]</span>
+      <span class="hud-header-brand">[ BB_CHANNEL :: ASTROCYTE GATEWAY ]</span>
       <div class="header-right">
         <button
           class="fire-selector"
@@ -1061,50 +1302,28 @@
     </header>
 
     <div class="middle-arena">
-      {#if !showSettingsPanel}
-        <div
-          class="timeline-wrapper"
-          class:open={isTimelineOpen}
-          role="complementary"
-          aria-label="Neural timeline drawer"
-          on:mouseenter={() => (isTimelineOpen = true)}
-          on:mouseleave={() => (isTimelineOpen = false)}
-        >
-          <div class="timeline-laser"></div>
-          <div class="timeline-scroll">
-            {#each history_sessions as session (session.session.id)}
-              <div
-                class="timeline-node"
-                style="margin-top: {calculateGap(session)}px;"
-                on:click={() => loadSession(session.session.id)}
-                on:keydown={(e) => (e.key === 'Enter') && loadSession(session.session.id)}
-                role="button"
-                tabindex="0"
-              >
-                <div class="dot"></div>
-                <div class="tooltip">
-                  <span class="time">{formatSessionTimestamp(session.session.timestamp)}</span>
-                  <span class="snippet">{session.session.first_user_message_snippet || '[NO_USER_MESSAGE]'}</span>
-                  <button
-                    class="tooltip-delete"
-                    type="button"
-                    title="Delete session"
-                    on:click={(e) => deleteSession(session.session.id, e)}
-                  >X</button>
-                </div>
-              </div>
-            {/each}
-          </div>
-          <button class="timeline-btn" on:click={startNewSignal}>
-            <span class="icon">[+]</span>
-            <span class="label">NEW SIGNAL</span>
-          </button>
-        </div>
-      {/if}
+      <div
+        class="timeline-trigger-zone"
+        on:mouseenter={onTimelineTriggerEnter}
+        on:mouseleave={onTimelineTriggerLeave}
+        aria-hidden="true"
+      ></div>
 
       <section class="hud-output" aria-label="output" bind:this={outputEl}>
         {#if viewingArchive}
           <div class="archive-banner">{archiveBannerText}</div>
+        {/if}
+        {#if telemetryLines.length > 0}
+          <div class="oligo-telemetry-stack" aria-live="polite">
+            {#each telemetryLines as line (line.id)}
+              <div
+                class="system-log-raw oligo-telemetry-line"
+                class:oligo-telemetry-line--settled={line.settled}
+              >
+                {@html line.html}
+              </div>
+            {/each}
+          </div>
         {/if}
         {#each history as msg (msg.id)}
         <article
@@ -1121,7 +1340,7 @@
               on:blur={commitEditingMessage}
             ></textarea>
           {:else if msg.sender === 'system_log'}
-            <div class="system-log-raw">{msg.text}</div>
+            <div class="system-log-raw">{@html beautifySystemLogForDisplay(msg.text)}</div>
           {:else if msg.sender === 'bb' || msg.sender === 'user'}
             <div class="msg-content" data-sender={msg.sender} data-loading={msg.isLoading ? 'true' : undefined}>
               {@html renderMarkdown(msg)}
@@ -1143,6 +1362,13 @@
       </section>
     </div>
 
+    <div
+      class="phantom-trigger-zone"
+      on:mouseenter={onPhantomTriggerEnter}
+      on:mouseleave={onPhantomTriggerLeave}
+      aria-hidden="true"
+    ></div>
+
     <form class="hud-input-wrap" on:submit={submitInput}>
       <div class="persona-quick-switch">
         <label for="persona-quick-select">persona</label>
@@ -1156,8 +1382,23 @@
             <option value={persona.id}>{persona.name}</option>
           {/each}
         </select>
+        <label for="skill-quick-select">skill</label>
+        <select
+          id="skill-quick-select"
+          class="persona-quick-select"
+          bind:value={activeSkillId}
+          on:change={onSkillSelect}
+        >
+          <option value="">[No Skill]</option>
+          {#each availableSkills as skill (skill.id)}
+            <option value={skill.id}>{skill.name}</option>
+          {/each}
+        </select>
       </div>
       <div class="hud-input-row">
+        {#if activeSkillDisplayName}
+          <span class="skill-active-chip" title="Active skill preset">[SKILL: {activeSkillDisplayName}]</span>
+        {/if}
         <textarea
           class="hud-input"
           bind:this={inputEl}
@@ -1172,11 +1413,13 @@
         {#if isGenerating}
           <button
             type="button"
-            class="signal-abort-btn"
+            class="override-guillotine"
             title="Hard-stop generation (partial reply is not saved)"
+            aria-label="Sever connection — critical override"
             on:click|stopPropagation={() => onAbortGeneration()}
           >
-            [ X ABORT ]
+            <span class="override-guillotine__idle" aria-hidden="true">[ // ]</span>
+            <span class="override-guillotine__hot" aria-hidden="true">[ SEVER_CONNECTION ]</span>
           </button>
         {/if}
       </div>
@@ -1439,215 +1682,26 @@
     overflow: hidden;
   }
 
-  .timeline-wrapper {
+  .phantom-trigger-zone {
+    width: 20px;
     position: absolute;
-    top: 0;
+    right: 0;
+    top: 28px;
     bottom: 0;
-    left: 0;
-    width: 36px;
-    background: rgba(0, 0, 0, 0);
-    z-index: 100;
-    transition: width 0.3s cubic-bezier(0.16, 1, 0.3, 1), background 0.3s;
-    display: flex;
-    flex-direction: column;
-  }
-
-  .timeline-wrapper.open {
-    width: 340px;
-    background: rgba(8, 8, 12, 0.95);
-    border-right: 1px solid rgba(187, 154, 247, 0.2);
-    backdrop-filter: blur(8px);
-    -webkit-backdrop-filter: blur(8px);
-    box-shadow: 10px 0 30px rgba(0, 0, 0, 0.7);
-  }
-
-  .timeline-laser {
-    position: absolute;
-    left: 17px;
-    top: 0;
-    bottom: 48px;
-    width: 2px;
-    z-index: 1;
-    background: linear-gradient(
-      180deg,
-      rgba(187, 154, 247, 0.1) 0%,
-      rgba(211, 184, 255, 0.9) 50%,
-      rgba(187, 154, 247, 0.1) 100%
-    );
-    background-size: 100% 200%;
-    box-shadow:
-      0 0 6px rgba(187, 154, 247, 0.5),
-      0 0 12px rgba(150, 100, 255, 0.3),
-      0 0 25px rgba(120, 80, 200, 0.15);
-    animation: energyFlow 4s linear infinite;
-  }
-
-  @keyframes energyFlow {
-    0% {
-      background-position: 0% 0%;
-    }
-    100% {
-      background-position: 0% 200%;
-    }
-  }
-
-  .timeline-scroll {
-    flex: 1;
-    width: 100%;
-    overflow-y: auto;
-    overflow-x: hidden;
-    padding-top: 48px;
-    padding-bottom: 20px;
-    z-index: 2;
-    scrollbar-width: none;
-  }
-
-  .timeline-scroll::-webkit-scrollbar {
-    display: none;
-  }
-
-  .timeline-node {
-    position: relative;
-    min-height: 14px;
-    cursor: pointer;
-    margin-bottom: 8px;
-  }
-
-  .dot {
-    position: absolute;
-    left: 13px;
-    top: 50%;
-    transform: translateY(-50%);
-    width: 10px;
-    height: 10px;
-    background: #ffffff;
-    border-radius: 50%;
-    box-shadow: 0 0 8px #fff, 0 0 16px #bb9af7;
-    transition: transform 0.2s, background 0.2s;
-  }
-
-  .timeline-node:hover .dot {
-    background: #bb9af7;
-    transform: translateY(-50%) scale(1.6);
-    box-shadow: 0 0 15px #bb9af7, 0 0 30px #bb9af7;
-  }
-
-  .tooltip {
-    position: absolute;
-    left: 42px;
-    top: 50%;
-    transform: translateY(-50%) translateX(-10px);
-    width: 270px;
-    max-height: 150px;
-    padding: 10px;
-    border-radius: 6px;
-    background: rgba(12, 12, 16, 0.85);
-    border: 1px solid rgba(187, 154, 247, 0.3);
-    color: #a9b1d6;
-    opacity: 0;
-    visibility: hidden;
-    transition: all 0.3s ease;
-    z-index: 100;
-    overflow-y: auto;
-  }
-
-  .timeline-scroll .timeline-node:first-child .tooltip {
-    top: 50%;
-    transform: translateY(0) translateX(-10px);
-  }
-
-  .timeline-wrapper.open .timeline-node:hover .tooltip {
-    opacity: 1;
-    visibility: visible;
-    transform: translateY(-50%) translateX(0);
-  }
-
-  .timeline-wrapper.open .timeline-scroll .timeline-node:first-child:hover .tooltip {
-    transform: translateY(0) translateX(0);
-  }
-
-  .tooltip .time {
-    display: block;
-    font-size: 10px;
-    margin-bottom: 6px;
-    color: #d7c1ff;
-    font-weight: bold;
-  }
-
-  .tooltip .snippet {
-    display: -webkit-box;
-    -webkit-box-orient: vertical;
-    -webkit-line-clamp: 4;
-    line-clamp: 4;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    font-size: 12px;
-    color: #9aa2c7;
-  }
-
-  .tooltip-delete {
-    position: absolute;
-    top: 4px;
-    right: 4px;
-    padding: 2px 6px;
-    font-size: 10px;
-    font-weight: bold;
-    color: rgba(255, 255, 255, 0.4);
+    z-index: 50;
     background: transparent;
-    border: none;
-    border-radius: 3px;
-    cursor: pointer;
-    transition: color 0.2s, background 0.2s;
+    pointer-events: auto;
   }
 
-  .tooltip-delete:hover {
-    color: #ff6b6b;
-    background: rgba(255, 107, 107, 0.15);
-  }
-
-  .timeline-btn {
-    height: 48px;
-    display: flex;
-    align-items: center;
-    background: #000000;
-    border: none;
-    color: #bb9af7;
-    cursor: pointer;
-    overflow: hidden;
-    padding: 0;
-    transition: all 0.3s;
-    z-index: 5;
-    margin-top: auto;
-  }
-
-  .timeline-wrapper.open .timeline-btn {
-    background: rgba(5, 5, 8, 1);
-    border-top: 1px solid rgba(187, 154, 247, 0.2);
-  }
-
-  .timeline-wrapper.open .timeline-btn:hover {
-    background: rgba(15, 12, 22, 1);
-    border-top-color: rgba(187, 154, 247, 0.35);
-  }
-
-  .timeline-btn .icon {
-    width: 36px;
-    flex-shrink: 0;
-    text-align: center;
-    font-weight: bold;
-    font-size: 14px;
-  }
-
-  .timeline-btn .label {
-    font-size: 11px;
-    letter-spacing: 0.1em;
-    white-space: nowrap;
-    opacity: 0;
-    transition: opacity 0.2s;
-  }
-
-  .timeline-wrapper.open .timeline-btn .label {
-    opacity: 1;
+  .timeline-trigger-zone {
+    width: 20px;
+    position: absolute;
+    left: 0;
+    top: 28px;
+    bottom: 0;
+    z-index: 50;
+    background: transparent;
+    pointer-events: auto;
   }
 
   .hud-header {
@@ -1707,7 +1761,7 @@
     box-sizing: border-box;
     overflow-y: auto;
     background: #000000;
-    color: #bb9af7;
+    color: rgba(226, 232, 240, 0.72);
     -webkit-app-region: no-drag;
   }
 
@@ -1719,8 +1773,6 @@
 
   .hud-output .msg-content {
     margin: 0;
-    font-size: 14px;
-    line-height: 1.6;
     white-space: normal;
   }
 
@@ -1731,25 +1783,17 @@
     box-sizing: border-box;
     border: none;
     background: #050505;
-    color: #bb9af7;
-    font: inherit;
+    color: #e2e8f0;
+    font-family: var(--font-body);
     font-size: 14px;
-    line-height: 1.5;
+    line-height: 1.65;
+    letter-spacing: 0.02em;
     padding: 10px 12px;
     outline: none;
   }
 
   .hud-output .msg-content[data-loading='true'] {
     opacity: 0.7;
-  }
-
-  .hud-output .msg-content[data-sender='user'] {
-    color: rgba(150, 150, 160, 0.9);
-  }
-
-  .hud-output .msg-content[data-sender='bb'],
-  .hud-output .msg-content[data-sender='system'] {
-    color: #bb9af7;
   }
 
   .msg-actions {
@@ -1845,7 +1889,6 @@
     border: none;
     background: transparent;
     color: #bb9af7;
-    font-family: "Fira Code", "JetBrains Mono", "Cascadia Mono", "Consolas", monospace;
     font-size: 14px;
     line-height: 1.2;
     padding: 16px;
@@ -1931,46 +1974,81 @@
   .provider-ping {
     display: inline-flex;
     align-items: center;
-    gap: 6px;
-    min-height: 12px;
+    gap: 8px;
+    min-height: 10px;
   }
 
+  /* Datacenter LED: 6×6, state-driven (see keyframes in block below) */
   .provider-ping-dot {
-    width: 8px;
-    height: 8px;
+    width: 6px;
+    height: 6px;
     border-radius: 50%;
-    background: rgba(120, 120, 128, 0.75);
     flex-shrink: 0;
+    background: rgba(100, 100, 108, 0.55);
+    box-shadow: none;
   }
 
+  .provider-ping[data-state='idle'] .provider-ping-dot {
+    background: rgba(88, 88, 96, 0.5);
+    opacity: 0.85;
+  }
+
+  /* Checking: gray micro-glow, 0.5s staccato blink */
   .provider-ping[data-state='probing'] .provider-ping-dot {
-    animation: pingDotPulse 900ms ease-in-out infinite;
+    background: rgba(160, 162, 170, 0.95);
+    animation: neural-led-checking 0.5s ease-in-out infinite;
   }
 
+  /* Online: cold white + halo, 3s breathe (halo driven by keyframes) */
   .provider-ping[data-state='up'] .provider-ping-dot {
     background: #ffffff;
-    box-shadow: 0 0 6px rgba(255, 255, 255, 0.4);
+    animation: neural-led-breathe 3s ease-in-out infinite;
   }
 
+  /* Offline: dead purple-black, no bloom */
   .provider-ping[data-state='down'] .provider-ping-dot {
-    background: #5c3e84;
-    box-shadow: 0 0 6px rgba(92, 62, 132, 0.25);
+    background: #4a2060;
+    box-shadow: none;
+    animation: none;
+    opacity: 1;
   }
 
   .provider-ping-label {
-    font-size: 9px;
-    letter-spacing: 0.08em;
+    font-size: 8px;
+    letter-spacing: 0.1em;
     text-transform: uppercase;
-    color: rgba(211, 184, 255, 0.75);
+    color: rgba(211, 184, 255, 0.62);
   }
 
-  @keyframes pingDotPulse {
+  @keyframes neural-led-checking {
     0%,
     100% {
-      opacity: 0.32;
+      opacity: 0.28;
+      box-shadow: 0 0 2px rgba(140, 140, 150, 0.25);
     }
     50% {
       opacity: 1;
+      box-shadow:
+        0 0 4px rgba(200, 200, 210, 0.55),
+        0 0 8px rgba(180, 185, 200, 0.35);
+    }
+  }
+
+  @keyframes neural-led-breathe {
+    0%,
+    100% {
+      opacity: 0.88;
+      box-shadow:
+        0 0 8px rgba(255, 255, 255, 0.6),
+        0 0 12px rgba(210, 230, 255, 0.3);
+      transform: scale(1);
+    }
+    50% {
+      opacity: 1;
+      box-shadow:
+        0 0 10px rgba(255, 255, 255, 0.78),
+        0 0 18px rgba(220, 240, 255, 0.45);
+      transform: scale(1.12);
     }
   }
 
@@ -2147,5 +2225,65 @@
 
   .settings-btn.primary {
     border-color: rgba(187, 154, 247, 0.52);
+  }
+
+  /* Oligo tool telemetry: sticky strip above transcript (uses global .system-log-raw from app.css) */
+  .oligo-telemetry-stack {
+    position: sticky;
+    top: 0;
+    z-index: 3;
+    margin: 0 0 12px;
+    padding: 6px 0 10px;
+    background: linear-gradient(
+      180deg,
+      rgba(0, 0, 0, 0.98) 0%,
+      rgba(0, 0, 0, 0.82) 78%,
+      transparent 100%
+    );
+    border-bottom: 1px solid rgba(122, 162, 247, 0.12);
+  }
+
+  .oligo-telemetry-line {
+    margin: 0.25rem 0 0.45rem;
+  }
+
+  .oligo-telemetry-line--settled {
+    opacity: 0.3;
+    animation: none !important;
+    transition: opacity 0.75s ease;
+  }
+
+  .oligo-telemetry-line--settled::after {
+    animation: none !important;
+    opacity: 0 !important;
+  }
+
+  :global(.oligo-telemetry-line .system-telemetry-prefix) {
+    color: rgba(137, 220, 235, 0.55);
+    font-weight: 600;
+  }
+
+  :global(.oligo-telemetry-line .system-telemetry-cmd) {
+    color: #7aa2f7;
+    font-weight: 500;
+  }
+
+  .skill-active-chip {
+    flex-shrink: 0;
+    align-self: center;
+    font-family: var(--font-mono, 'JetBrains Mono', monospace);
+    font-size: 9px;
+    letter-spacing: 0.05em;
+    color: rgba(192, 132, 252, 0.98);
+    text-shadow:
+      0 0 8px rgba(139, 92, 246, 0.45),
+      0 0 14px rgba(91, 33, 182, 0.25);
+    padding: 3px 7px;
+    border: 1px solid rgba(139, 92, 246, 0.4);
+    background: rgba(45, 20, 70, 0.42);
+    max-width: 12rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 </style>

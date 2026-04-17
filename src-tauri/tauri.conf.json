@@ -14,11 +14,35 @@
       {
         "title": "astrocyte",
         "width": 800,
-        "height": 600,
+        "height": 900,
         "decorations": false,
         "transparent": true,
         "alwaysOnTop": true,
         "visible": false
+      },
+      {
+        "label": "sidebar",
+        "url": "/sidebar",
+        "width": 360,
+        "height": 900,
+        "decorations": false,
+        "transparent": true,
+        "alwaysOnTop": true,
+        "visible": false,
+        "theme": "Dark",
+        "backgroundColor": "#0f0c16"
+      },
+      {
+        "label": "timeline",
+        "url": "/timeline",
+        "width": 320,
+        "height": 900,
+        "decorations": false,
+        "transparent": true,
+        "alwaysOnTop": true,
+        "visible": false,
+        "theme": "Dark",
+        "backgroundColor": "#0f0c16"
       }
     ],
     "security": {
