@@ -232,6 +232,9 @@ def parse_args_with_repair(raw_args: str) -> tuple[dict[str, Any], list[str]]:
         (parsed_dict, repairs_applied)；彻底失败时抛出 ``ValueError``。
     """
     s = raw_args.strip()
+    if s == "":
+        # 空字符串视为空参数对象，兼容 zero-arg 工具调用。
+        return {}, []
     try:
         data = json.loads(s)
         return _coerce_parsed_json_to_tool_args(data), []

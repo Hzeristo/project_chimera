@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import time
 from contextlib import asynccontextmanager
@@ -171,6 +172,43 @@ def create_app() -> FastAPI:
 
         return StreamingResponse(
             instrumented_stream(),
+            media_type="text/event-stream",
+            headers={
+                "Cache-Control": "no-cache",
+                "Connection": "keep-alive",
+                "X-Accel-Buffering": "no",
+            },
+        )
+
+    @app.get("/v1/tasks/stream")
+    async def task_progress_stream(request: Request) -> StreamingResponse:
+        """Long-lived SSE channel for background task status-change events."""
+        task_service: TaskService = request.app.state.task_service
+        subscriber = task_service.subscribe()
+
+        async def event_generator():
+            try:
+                yield sse_event("task-stream-hello", {"timestamp_ms": int(time.time() * 1000)})
+                while True:
+                    if await request.is_disconnected():
+                        break
+                    try:
+                        event = await asyncio.wait_for(subscriber.get(), timeout=15.0)
+                        yield sse_event(
+                            f"task-{event.event_type.value}",
+                            event.model_dump(mode="json"),
+                        )
+                    except asyncio.TimeoutError:
+                        yield sse_event(
+                            "task-heartbeat", {"timestamp_ms": int(time.time() * 1000)}
+                        )
+            except CLIENT_GONE_EXCEPTIONS:
+                pass
+            finally:
+                task_service.unsubscribe(subscriber)
+
+        return StreamingResponse(
+            event_generator(),
             media_type="text/event-stream",
             headers={
                 "Cache-Control": "no-cache",

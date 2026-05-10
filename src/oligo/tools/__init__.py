@@ -12,6 +12,7 @@ from src.oligo.tools.miner_tools import (
 )
 from src.oligo.tools.vault_tools import (
     obsidian_graph_query,
+    read_vault_file,
     search_vault,
     search_vault_attribute,
 )
@@ -24,6 +25,7 @@ __all__ = [
     "check_task_status",
     "daily_paper_pipeline",
     "obsidian_graph_query",
+    "read_vault_file",
     "search_vault",
     "search_vault_attribute",
     "web_search",

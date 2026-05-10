@@ -19,6 +19,8 @@ class _VaultToolPort(Protocol):
         max_depth: int = 2,
     ) -> list[dict[str, Any]]: ...
 
+    def read_file(self, path: str) -> str: ...
+
 
 _vault_adapter: _VaultToolPort | None = None
 
@@ -27,6 +29,40 @@ def set_vault_adapter(adapter: _VaultToolPort | None) -> None:
     """Bind the global vault adapter (e.g. from FastAPI lifespan)."""
     global _vault_adapter
     _vault_adapter = adapter
+
+
+def get_vault_adapter() -> _VaultToolPort:
+    """Return the process-wide vault adapter or raise when unavailable."""
+    if _vault_adapter is None:
+        raise RuntimeError("Vault adapter not initialized")
+    return _vault_adapter
+
+
+async def read_vault_file(path: str) -> str:
+    """
+    Read a full vault note by path (relative to vault root or absolute under vault root).
+
+    Args:
+        path: Vault note path.
+
+    Returns:
+        ``[File: <path>]`` header followed by full note content.
+    """
+    p = str(path or "").strip()
+    if not p:
+        return "[Tool Error]: read_vault_file requires a non-empty path string."
+    try:
+        vault = get_vault_adapter()
+        content = vault.read_file(p)
+    except RuntimeError:
+        return "[Tool Error] Vault adapter not initialized"
+    except FileNotFoundError:
+        return f"[Tool Error]: read_vault_file file not found: {p}"
+    except ValueError as e:
+        return f"[Tool Error]: read_vault_file invalid path: {e}"
+    except Exception as e:
+        return f"Error: Tool 'read_vault_file' failed: {e}"
+    return f"[File: {p}]\n\n{content}"
 
 
 async def search_vault(query: str, **kwargs: Any) -> str:

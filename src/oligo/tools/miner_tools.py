@@ -35,6 +35,7 @@ async def arxiv_miner(query: str, max_results: int = 5, **kwargs: Any) -> str:
 
     task_service = get_task_service()
     task_id = task_service.create_task("arxiv_fetch")
+    await task_service.emit_created(task_id)
     work = fetch_and_process_arxiv(
         str(query).strip(), n, task_id=task_id, task_service=task_service
     )
@@ -51,17 +52,18 @@ async def _run_daily_with_progress(
     arxiv_max_results: int | None,
     skip_telegram: bool,
 ) -> str:
-    from src.crucible.services.daily_chimera_service import run_daily_pipeline
+    from src.crucible.services.daily_chimera_service import (
+        run_daily_pipeline_with_stage_events,
+    )
 
     task_service = get_task_service()
-    return await asyncio.to_thread(
-        run_daily_pipeline,
-        None,
+    return await run_daily_pipeline_with_stage_events(
+        task_id=task_id,
+        task_service=task_service,
+        settings=None,
         arxiv_query=arxiv_query,
         arxiv_max_results=arxiv_max_results,
         skip_telegram=skip_telegram,
-        task_id=task_id,
-        task_service=task_service,
     )
 
 
@@ -103,6 +105,7 @@ async def daily_paper_pipeline(
 
     task_service = get_task_service()
     task_id = task_service.create_task("daily_pipeline")
+    await task_service.emit_created(task_id)
     work = _run_daily_with_progress(
         task_id,
         q_override,

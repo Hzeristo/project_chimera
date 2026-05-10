@@ -120,6 +120,12 @@ def test_parse_args_with_repair_top_level_string_coercion() -> None:
     assert r == []
 
 
+def test_parse_args_with_repair_empty_string_as_empty_dict() -> None:
+    d, r = parse_args_with_repair("   ")
+    assert d == {}
+    assert r == []
+
+
 def test_parse_args_with_repair_failure_raises() -> None:
     with pytest.raises(ValueError, match="Cannot parse args even with repair"):
         parse_args_with_repair("NOT_JSON {{{")

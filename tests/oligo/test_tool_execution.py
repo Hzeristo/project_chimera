@@ -56,10 +56,10 @@ def test_parse_tool_calls_unknown_tool_denied_at_parse(mock_client):
         llm_client=mock_client(),
         allowed_tools=None,
     )
-    probe = '<CMD:read_vault_file({"path": "note.md"})>'
+    probe = '<CMD:nonexistent_vault_tool({"path": "note.md"})>'
     planned = agent._parse_tool_calls(probe)
     assert len(planned) == 1
-    assert planned[0].tool_name == "read_vault_file"
+    assert planned[0].tool_name == "nonexistent_vault_tool"
     assert planned[0].allowed is False
     dr = planned[0].deny_reason or ""
     assert "not a registered tool" in dr
@@ -250,6 +250,9 @@ class _MockVaultAdapter:
                 "links": ["Other"],
             }
         ]
+
+    def read_file(self, path: str) -> str:
+        return f"# Mock Note\n\nPath: {path}\n"
 
 
 async def test_run_theater_with_tool_calls_executes_and_streams(mock_client):

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Collection
 from typing import Any
 
@@ -9,6 +10,7 @@ from src.crucible.core.schemas import PromptComponent, PromptStage
 from src.oligo.tools.registry import get_tool_registry
 
 _global_composer: PromptComposer | None = None
+logger = logging.getLogger(__name__)
 
 # 与历史 ``agent._FINAL_GUARDRAIL`` 一致；在 composer 中作为模板，由 ``"\\n\\n".join`` 与上段衔接（模板本身无前置换行）。
 FINAL_GUARDRAIL_TEXT = (
@@ -33,6 +35,18 @@ ROUTER_INTRO = (
     "</tool_call>\n\n"
     "Format B (CMD, legacy compatible):\n"
     "<CMD:search_vault({{\"query\": \"...\"}})>\n\n"
+    "Examples:\n"
+    "<examples>\n"
+    "  <example>\n"
+    "    <user_intent>Run the daily paper pipeline</user_intent>\n"
+    "    <correct_output>\n"
+    "      <tool_call>\n"
+    "        <tool_name>daily_paper_pipeline</tool_name>\n"
+    "        <args>{{}}</args>\n"
+    "      </tool_call>\n"
+    "    </correct_output>\n"
+    "  </example>\n"
+    "</examples>\n\n"
     "You may output multiple tool_call/CMD blocks in one response (they will run in parallel)."
 )
 
@@ -96,6 +110,19 @@ class PromptComposer:
 
         if active_ids is not None:
             candidates = [c for c in candidates if c.id in active_ids]
+
+        if stage == PromptStage.ROUTER:
+            # HOTFIX.3: persona 只允许进入 Final 阶段，Router 侧做二次保险。
+            safe_candidates: list[PromptComponent] = []
+            for c in candidates:
+                if "{persona}" in c.template:
+                    logger.warning(
+                        "[Prompt] drop persona-bearing component in router stage: %s",
+                        c.id,
+                    )
+                    continue
+                safe_candidates.append(c)
+            candidates = safe_candidates
 
         candidates.sort(key=lambda x: x.priority, reverse=True)
 

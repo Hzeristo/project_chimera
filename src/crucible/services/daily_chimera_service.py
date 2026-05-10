@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import html
 import logging
 from typing import Any
@@ -16,6 +17,13 @@ from src.crucible.ports.ingest.mineru_pipeline import run_pdf_ingestion
 from src.crucible.services.task_service import TaskService
 
 logger = logging.getLogger(__name__)
+
+
+class DailyPipelineStage:
+    ARXIV_FETCH = ("arxiv_fetch", "Fetching from arXiv")
+    PDF_INGESTION = ("pdf_ingestion", "Converting PDF → Markdown via MinerU")
+    BATCH_FILTER = ("batch_filter", "Filtering papers via LLM judge")
+    TELEGRAM_NOTIFY = ("telegram_notify", "Sending Telegram digest")
 
 
 def _merge_arxiv_overrides(
@@ -143,6 +151,107 @@ def run_daily_pipeline(
     else:
         _update_task_progress(
             task_service, task_id, 0.99, "Telegram skipped (skip_telegram=True)."
+        )
+
+    summary = (
+        f"Daily pipeline completed. new_pdfs={new_pdfs_count} ingested={ingested_count} "
+        f"batch_total={stats.total} must_read={stats.must_read} skim={stats.skim} "
+        f"reject={stats.reject} errors={stats.errors} telegram={'no' if skip_telegram else 'yes'}"
+    )
+    logger.info("[Service] %s", summary)
+    return summary
+
+
+async def run_daily_pipeline_with_stage_events(
+    *,
+    task_id: str,
+    task_service: TaskService,
+    settings: ChimeraConfig | None = None,
+    arxiv_query: str | None = None,
+    arxiv_max_results: int | None = None,
+    skip_telegram: bool = False,
+) -> str:
+    """
+    Async wrapper for daily pipeline with stage-change events.
+
+    This path is for task bus + SSE consumers (front-end stage timers).
+    """
+    if settings is None:
+        settings = get_config()
+    settings = _merge_arxiv_overrides(settings, arxiv_query, arxiv_max_results)
+    logger.info("[Service] === Chimera Daily Pipeline Started (stage-event mode) ===")
+
+    pm = settings.paper_miner_or_default
+    input_dir = pm.arxivpdf_dir or (settings.project_root / "papers" / "arxivpdf")
+
+    await task_service.start_stage(
+        task_id,
+        stage_id=DailyPipelineStage.ARXIV_FETCH[0],
+        stage_label=DailyPipelineStage.ARXIV_FETCH[1],
+        overall_progress=0.0,
+    )
+    new_pdfs_count = await asyncio.to_thread(run_arxiv_fetch, target_dir=input_dir, settings=settings)
+    task_service.update_progress(
+        task_id, 0.2, f"ArXiv fetch done (new PDFs: {new_pdfs_count})."
+    )
+
+    raw_output_dir = pm.md_papers_raw_dir or (
+        settings.project_root / "papers" / "md_papers_raw"
+    )
+    clean_dir = pm.md_papers_dir or (
+        settings.project_root / "papers" / "md_papers"
+    )
+    await task_service.start_stage(
+        task_id,
+        stage_id=DailyPipelineStage.PDF_INGESTION[0],
+        stage_label=DailyPipelineStage.PDF_INGESTION[1],
+        overall_progress=0.2,
+    )
+    ingested_count = await asyncio.to_thread(
+        run_pdf_ingestion,
+        input_dir=input_dir,
+        output_dir=raw_output_dir,
+        clean_dir=clean_dir,
+        settings=settings,
+    )
+    task_service.update_progress(
+        task_id, 0.6, f"Ingestion done (success count: {ingested_count})."
+    )
+
+    await task_service.start_stage(
+        task_id,
+        stage_id=DailyPipelineStage.BATCH_FILTER[0],
+        stage_label=DailyPipelineStage.BATCH_FILTER[1],
+        overall_progress=0.6,
+    )
+    stats = await asyncio.to_thread(run_batch_filter, md_papers_dir=clean_dir, settings=settings)
+    task_service.update_progress(
+        task_id,
+        0.95,
+        (
+            f"Triage done: total={stats.total} must_read={stats.must_read} "
+            f"skim={stats.skim} reject={stats.reject} errors={stats.errors}."
+        ),
+    )
+
+    if not skip_telegram:
+        await task_service.start_stage(
+            task_id,
+            stage_id=DailyPipelineStage.TELEGRAM_NOTIFY[0],
+            stage_label=DailyPipelineStage.TELEGRAM_NOTIFY[1],
+            overall_progress=0.95,
+        )
+        report_message, reply_markup = _render_daily_report(
+            stats=stats, new_pdfs_count=new_pdfs_count
+        )
+        notifier = TelegramNotifier(settings=settings)
+        await asyncio.to_thread(
+            notifier.send_summary, html_message=report_message, reply_markup=reply_markup
+        )
+        task_service.update_progress(task_id, 0.99, "Telegram sent.")
+    else:
+        task_service.update_progress(
+            task_id, 0.99, "Telegram skipped (skip_telegram=True)."
         )
 
     summary = (

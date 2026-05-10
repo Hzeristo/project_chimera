@@ -15,6 +15,15 @@ SourceType = Literal[
 ]
 
 
+class TaskEventType(str, Enum):
+    CREATED = "created"
+    STAGE_START = "stage_start"
+    STAGE_PROGRESS = "stage_progress"
+    COMPLETED = "completed"
+    FAILED = "failed"
+    CANCELLED = "cancelled"
+
+
 class PaperMetadata(BaseModel):
     """Typed metadata payload attached to a paper."""
 
@@ -566,3 +575,28 @@ class ToolSpec(BaseModel):
     )
 
     model_config = ConfigDict(extra="forbid")
+
+
+class TaskEvent(BaseModel):
+    """task 状态变化事件, 通过 SSE 推送给前端。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    event_type: TaskEventType
+    task_id: str
+    task_type: str
+    stage_id: str | None = Field(
+        default=None,
+        description="STAGE_START 时必填, 前端用此识别是否要清零计时器。",
+    )
+    stage_label: str | None = Field(
+        default=None,
+        description="人类可读的阶段名, 如 'Fetching from arXiv'。",
+    )
+    overall_progress: float = Field(
+        default=0.0,
+        description="0.0-1.0, 整个 task 的总进度估计。",
+    )
+    message: str | None = None
+    error: str | None = None
+    timestamp_ms: int = Field(description="后端时钟的 epoch ms, 前端可用此校准。")

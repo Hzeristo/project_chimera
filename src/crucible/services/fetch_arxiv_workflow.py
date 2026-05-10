@@ -13,6 +13,12 @@ from src.crucible.services.task_service import TaskService
 logger = logging.getLogger(__name__)
 
 
+class ArxivMinerStage:
+    SEARCH = ("search", "Searching arXiv API")
+    DOWNLOAD = ("download", "Downloading PDFs")
+    METADATA = ("metadata", "Extracting metadata")
+
+
 def run_arxiv_fetch(target_dir: Path, settings: ChimeraConfig | None = None) -> int:
     try:
         fetcher = ArxivFetcher(settings=settings or get_config())
@@ -57,32 +63,9 @@ def _papers_to_markdown(query: str, records: list[dict]) -> str:
     return "\n".join(lines).strip()
 
 
-def _fetch_and_process_arxiv_sync(
-    query: str,
-    max_results: int,
-    task_id: str | None = None,
-    task_service: TaskService | None = None,
-) -> str:
-    def report(p: float, message: str | None = None) -> None:
-        if task_id is not None and task_service is not None:
-            task_service.update_progress(task_id, p, message)
-
-    report(0.08, "Searching arXiv...")
+def _fetch_arxiv_records_sync(query: str, max_results: int) -> list[dict]:
     fetcher = ArxivFetcher(settings=get_config())
-    records = fetcher.fetch_search_results(query, max_results)
-    if not records:
-        report(0.95, "No papers returned; finishing.")
-        return f"# arXiv search: {query}\n\nNo papers returned (check query or network)."
-
-    report(0.22, f"Found {len(records)} paper(s). Preparing content...")
-    nrec = max(len(records), 1)
-    for i, rec in enumerate(records):
-        p = 0.22 + (i + 1) / nrec * 0.58
-        title = (rec.get("title") or "Untitled")[:60]
-        report(p, f"Processing {i + 1}/{len(records)}: {title}...")
-
-    report(0.85, "Building Markdown output...")
-    return _papers_to_markdown(query, records)
+    return fetcher.fetch_search_results(query, max_results)
 
 
 async def fetch_and_process_arxiv(
@@ -100,6 +83,39 @@ async def fetch_and_process_arxiv(
     """
     q = (query or "").strip()
     n = int(max_results) if max_results is not None else 5
-    return await asyncio.to_thread(
-        _fetch_and_process_arxiv_sync, q, n, task_id, task_service
-    )
+
+    if task_id is not None and task_service is not None:
+        await task_service.start_stage(
+            task_id,
+            stage_id=ArxivMinerStage.SEARCH[0],
+            stage_label=ArxivMinerStage.SEARCH[1],
+            overall_progress=0.0,
+        )
+    records = await asyncio.to_thread(_fetch_arxiv_records_sync, q, n)
+    if not records:
+        if task_id is not None and task_service is not None:
+            await task_service.start_stage(
+                task_id,
+                stage_id=ArxivMinerStage.METADATA[0],
+                stage_label=ArxivMinerStage.METADATA[1],
+                overall_progress=0.95,
+            )
+            task_service.update_progress(task_id, 0.95, "No papers returned; finishing.")
+        return f"# arXiv search: {q}\n\nNo papers returned (check query or network)."
+
+    if task_id is not None and task_service is not None:
+        await task_service.start_stage(
+            task_id,
+            stage_id=ArxivMinerStage.DOWNLOAD[0],
+            stage_label=ArxivMinerStage.DOWNLOAD[1],
+            overall_progress=0.45,
+        )
+        task_service.update_progress(task_id, 0.7, f"Found {len(records)} paper(s).")
+        await task_service.start_stage(
+            task_id,
+            stage_id=ArxivMinerStage.METADATA[0],
+            stage_label=ArxivMinerStage.METADATA[1],
+            overall_progress=0.7,
+        )
+        task_service.update_progress(task_id, 0.85, "Building Markdown output...")
+    return await asyncio.to_thread(_papers_to_markdown, q, records)

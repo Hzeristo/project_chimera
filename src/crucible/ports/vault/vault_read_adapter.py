@@ -175,6 +175,47 @@ class VaultReadAdapter:
                 self._cache.popitem(last=False)
         return raw
 
+    def _resolve_path_within_vault(self, path: str) -> Path:
+        """Resolve a user-provided path and ensure it stays inside ``vault_root``."""
+        raw = str(path or "").strip()
+        if not raw:
+            raise ValueError("path must be a non-empty string")
+
+        vault_root = self._settings.vault_root.resolve()
+        if not vault_root.is_dir():
+            raise ValueError(f"vault_root is not a directory: {vault_root}")
+
+        candidate = Path(raw)
+        if not candidate.is_absolute():
+            candidate = vault_root / candidate
+        try:
+            resolved = candidate.resolve()
+        except OSError as e:
+            raise ValueError(f"invalid path: {raw!r}") from e
+
+        try:
+            resolved.relative_to(vault_root)
+        except ValueError as e:
+            raise ValueError("path escapes vault_root") from e
+
+        return resolved
+
+    def read_file(self, path: str) -> str:
+        """
+        Read full markdown note content by absolute/relative path inside ``vault_root``.
+
+        Raises:
+            ValueError: invalid / out-of-vault path.
+            FileNotFoundError: path does not exist or is not a file.
+        """
+        resolved = self._resolve_path_within_vault(path)
+        if not resolved.is_file():
+            raise FileNotFoundError(f"file not found: {path}")
+        content = self._read_file_cached(resolved)
+        if content is None:
+            raise ValueError(f"cannot read file as UTF-8: {path}")
+        return content
+
     def _ripper_sync(self, vault: Path, query: str, top_k: int) -> str:
         logger.info("[Vault] Searching vault at: %s for query: %r", vault, query)
         tokens = _tokens(query)

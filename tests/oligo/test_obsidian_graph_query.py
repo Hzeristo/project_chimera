@@ -35,6 +35,9 @@ class _GraphAdapterMock:
         self.last_call = (node_type, link_pattern, max_depth)
         return list(self._results)
 
+    def read_file(self, path: str) -> str:
+        return ""
+
 
 @pytest.fixture(autouse=True)
 def _reset_vault_adapter() -> Generator[None, None, None]:

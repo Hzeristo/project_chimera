@@ -7,8 +7,12 @@ from typing import Any
 
 import pytest
 
-from src.crucible.core.schemas import PromptStage
-from src.oligo.core.prompt_composer import FINAL_GUARDRAIL_TEXT, get_prompt_composer
+from src.crucible.core.schemas import PromptComponent, PromptStage
+from src.oligo.core.prompt_composer import (
+    FINAL_GUARDRAIL_TEXT,
+    PromptComposer,
+    get_prompt_composer,
+)
 from tests.oligo.conftest import MockLLMClient
 
 
@@ -37,7 +41,7 @@ _FINAL_REGRESSION: set[str] = {
 }
 
 # MW.4 锁定：_combined_regression_prompt_bytes() 在默认组件下的 UTF-8 长度
-MW4_COMBINED_PROMPT_BASELINE_BYTES = 2066
+MW4_COMBINED_PROMPT_BASELINE_BYTES = 2341
 
 
 def _combined_regression_prompt_bytes() -> int:
@@ -81,6 +85,38 @@ def test_router_stable_section_byte_identical_on_repeated_compose() -> None:
     assert a1.encode("utf-8") == a2.encode("utf-8")
     # 动态段均含 timestamp，仍应一致（同一 context）
     assert d1 == d2
+
+
+def test_router_stage_blocks_persona_even_if_component_is_misconfigured() -> None:
+    """Router 阶段即使误注册了含 {persona} 的组件，也必须被丢弃。"""
+    composer = PromptComposer()
+    composer.register(
+        PromptComponent(
+            id="router_core",
+            stage=PromptStage.ROUTER,
+            priority=100,
+            cacheable=True,
+            template="ROUTER CORE",
+        )
+    )
+    composer.register(
+        PromptComponent(
+            id="misconfigured_persona",
+            stage=PromptStage.BOTH,
+            priority=90,
+            cacheable=True,
+            template="[LEAK]\n{persona}",
+        )
+    )
+    stable, dynamic = composer.compose(
+        PromptStage.ROUTER,
+        context={"persona": "SHOULD_NOT_APPEAR"},
+        active_ids={"router_core", "misconfigured_persona"},
+    )
+    full = f"{stable}\n\n{dynamic}".strip()
+    assert "ROUTER CORE" in full
+    assert "SHOULD_NOT_APPEAR" not in full
+    assert "[LEAK]" not in full
 
 
 def test_final_system_without_skill_has_no_skill_directive() -> None:

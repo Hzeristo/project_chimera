@@ -13,6 +13,7 @@ from src.oligo.tools.miner_tools import (
 )
 from src.oligo.tools.vault_tools import (
     obsidian_graph_query,
+    read_vault_file,
     search_vault,
     search_vault_attribute,
 )
@@ -112,6 +113,17 @@ def _register_default_tools(reg: ToolRegistry) -> None:
             concurrency_safe=True,
             long_running=False,
             examples=['<CMD:search_vault({"query": "memory architecture"})>'],
+        ),
+    )
+    reg.register(
+        read_vault_file,
+        ToolSpec(
+            name="read_vault_file",
+            description="Read the full content of a vault note by its path.",
+            args_schema={"path": {"type": "str", "required": True}},
+            concurrency_safe=True,
+            long_running=False,
+            examples=['<CMD:read_vault_file({"path": "00_Inbox/example.md"})>'],
         ),
     )
     reg.register(
