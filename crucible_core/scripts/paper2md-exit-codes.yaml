@@ -1,0 +1,31 @@
+exit_codes:
+  - code: 0
+    name: SUCCESS
+    description: "转换成功完成"
+    trigger: "client.convert(pdf_path) 成功执行且无异常"
+    suggested_action: "继续后续流程"
+    is_error: false
+  - code: 1
+    name: RUNTIME_FAILURE
+    description: "转换过程运行时错误"
+    trigger: "捕获到 RuntimeError 异常"
+    suggested_action: "检查输入文件是否有效，或查看详细日志"
+    is_error: true
+  - code: 2
+    name: INVALID_CLI_INPUT
+    description: "命令行输入无效"
+    trigger: "捕获到 FileNotFoundError 或 ValueError 异常"
+    suggested_action: "验证提供的PDF路径和输出目录参数"
+    is_error: true
+  - code: 3
+    name: ENVIRONMENT_NOT_READY
+    description: "运行环境未就绪"
+    trigger: "捕获到 EnvironmentError 异常"
+    suggested_action: "确保依赖项（如MinerU）已正确安装并可用"
+    is_error: true
+  - code: 99
+    name: UNEXPECTED_FAILURE
+    description: "未预期的未知错误"
+    trigger: "捕获到除上述特定异常外的任何 Exception"
+    suggested_action: "查看异常堆栈跟踪，可能需要人工介入"
+    is_error: true
