@@ -1,0 +1,1300 @@
+@import url('https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500&family=Inter:wght@400;500;600&family=JetBrains+Mono:ital,wght@0,400;0,500;0,600;1,400&display=swap');
+
+/*────────────────────────────────────────
+  Astrocyte 设计 Token — Sprint 1（与 docs/Astrocyte_UI_Style_Consistency_Report 对齐）
+────────────────────────────────────────*/
+:root {
+  color-scheme: dark;
+
+  /* 主色 */
+  --astrocyte-neural-purple: #bb9af7;
+  --astrocyte-purple-glow: var(--astrocyte-purple-a-30);
+  --astrocyte-purple-subtle: var(--astrocyte-purple-a-10);
+  --astrocyte-purple-border: var(--astrocyte-purple-a-30);
+  /* 紫色 α 阶梯：对应 rgba(187, 154, 247, n) */
+  --astrocyte-purple-a-95: rgba(187, 154, 247, 0.95);
+  --astrocyte-purple-a-92: rgba(187, 154, 247, 0.92);
+  --astrocyte-purple-a-90: rgba(187, 154, 247, 0.9);
+  --astrocyte-purple-a-86: rgba(187, 154, 247, 0.86);
+  --astrocyte-purple-a-85: rgba(187, 154, 247, 0.85);
+  --astrocyte-purple-a-82: rgba(187, 154, 247, 0.82);
+  --astrocyte-purple-a-80: rgba(187, 154, 247, 0.8);
+  --astrocyte-purple-a-78: rgba(187, 154, 247, 0.78);
+  --astrocyte-purple-a-75: rgba(187, 154, 247, 0.75);
+  --astrocyte-purple-a-72: rgba(187, 154, 247, 0.72);
+  --astrocyte-purple-a-66: rgba(187, 154, 247, 0.66);
+  --astrocyte-purple-a-65: rgba(187, 154, 247, 0.65);
+  --astrocyte-purple-a-60: rgba(187, 154, 247, 0.6);
+  --astrocyte-purple-a-56: rgba(187, 154, 247, 0.56);
+  --astrocyte-purple-a-55: rgba(187, 154, 247, 0.55);
+  --astrocyte-purple-a-52: rgba(187, 154, 247, 0.52);
+  --astrocyte-purple-a-50: rgba(187, 154, 247, 0.5);
+  --astrocyte-purple-a-45: rgba(187, 154, 247, 0.45);
+  --astrocyte-purple-a-42: rgba(187, 154, 247, 0.42);
+  --astrocyte-purple-a-40: rgba(187, 154, 247, 0.4);
+  --astrocyte-purple-a-35: rgba(187, 154, 247, 0.35);
+  --astrocyte-purple-a-32: rgba(187, 154, 247, 0.32);
+  --astrocyte-purple-a-30: rgba(187, 154, 247, 0.3);
+  --astrocyte-purple-a-28: rgba(187, 154, 247, 0.28);
+  --astrocyte-purple-a-25: rgba(187, 154, 247, 0.25);
+  --astrocyte-purple-a-22: rgba(187, 154, 247, 0.22);
+  --astrocyte-purple-a-20: rgba(187, 154, 247, 0.2);
+  --astrocyte-purple-a-16: rgba(187, 154, 247, 0.16);
+  --astrocyte-purple-a-15: rgba(187, 154, 247, 0.15);
+  --astrocyte-purple-a-12: rgba(187, 154, 247, 0.12);
+  --astrocyte-purple-a-10: rgba(187, 154, 247, 0.1);
+  --astrocyte-purple-a-08: rgba(187, 154, 247, 0.08);
+  --astrocyte-purple-a-06: rgba(187, 154, 247, 0.06);
+  --astrocyte-purple-a-05: rgba(187, 154, 247, 0.05);
+  --astrocyte-purple-a-04: rgba(187, 154, 247, 0.04);
+
+  /* 第二 accent（矿工进度条等） */
+  --astrocyte-accent-cyan: #22d3ee;
+  --astrocyte-accent-violet: #7c3aed;
+
+  /* 背景层级 */
+  --surface-0: rgba(10, 10, 15, 1);
+  --surface-1: rgba(15, 15, 20, 0.95);
+  --surface-2: rgba(20, 18, 30, 0.95);
+  --surface-3: rgba(22, 20, 32, 0.85);
+  --surface-body: rgba(15, 15, 20, 0.8);
+  --surface-absolute-black: #000000;
+  --surface-inset: rgba(12, 10, 18, 0.95);
+  --surface-inset-soft: rgba(12, 10, 18, 0.6);
+  --surface-skill-tile: rgba(30, 27, 40, 0.4);
+  --surface-skill-tile-hover: rgba(30, 27, 40, 0.6);
+  --surface-chrome-88: rgba(10, 10, 15, 0.88);
+  --surface-chrome-92: rgba(10, 10, 15, 0.92);
+  --surface-code: #050505;
+  /* 设置/模态（略浅于 panel） */
+  --surface-modal: rgba(8, 8, 12, 0.94);
+  --surface-modal-inner: rgba(8, 8, 12, 0.92);
+  /* 档案态横幅等 */
+  --surface-archive: rgba(6, 6, 10, 0.95);
+  /* 设置表单项行底等 */
+  --surface-row-muted: rgba(12, 12, 20, 0.92);
+  /* 模态遮罩、嵌套暗区、毛玻璃/浮层、侧栏（字面 rgba 收拢至此） */
+  --surface-scrim: rgba(0, 0, 0, 0.55);
+  --surface-embed: rgba(0, 0, 0, 0.38);
+  --surface-embed-deep: rgba(0, 0, 0, 0.34);
+  --surface-input-dim: rgba(0, 0, 0, 0.5);
+  --surface-sidebar: rgba(15, 12, 22, 0.65);
+  --surface-floating: rgba(15, 12, 22, 0.85);
+  --surface-tile-90: rgba(8, 8, 12, 0.9);
+  --surface-card-frost: rgba(20, 20, 25, 0.4);
+  --surface-scrollbar-track: rgba(0, 0, 0, 0.25);
+  --surface-bright: #ffffff;
+  --surface-progress-track: rgba(30, 41, 59, 0.9);
+  /* 设置里 Provider 连接指示 LED */
+  --status-led-mute: rgba(100, 100, 108, 0.55);
+  --status-led-mute-dim: rgba(88, 88, 96, 0.5);
+  --status-led-probe: rgba(160, 162, 170, 0.95);
+  --status-led-off: #4a2060;
+  /* 时间轴等危险操作轻衬 */
+  --surface-danger-surface: rgba(255, 107, 107, 0.15);
+
+  /* 边框 */
+  --border-hud: rgba(100, 90, 130, 0.3);
+  --border-hud-emphasis: rgba(100, 90, 130, 0.35);
+  --border-muted: rgba(100, 90, 130, 0.2);
+  --border-active: var(--astrocyte-neural-purple);
+  --border-neutral: #333333;
+  --border-scrollbar: rgba(51, 51, 51, 0.9);
+
+  /* 语义 */
+  --feedback-good: #8ef1b6;
+  --feedback-bad: #ff8fa3;
+  --error: #dc2626;
+  --error-surface: rgba(220, 38, 38, 0.1);
+  --error-fg: #fecaca;
+  --warning: #f59e0b;
+
+  /* 间距：4px 基准 */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+
+  /* 圆角 */
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+  --radius-xs: 2px;
+  --radius-3: 3px;
+
+  /* 字体层级 */
+  --font-xs: 0.7rem;
+  --font-sm: 0.8rem;
+  --font-base: 0.9rem;
+  --font-md: 1rem;
+  --font-lg: 1.2rem;
+  --line-tight: 1.3;
+  --line-normal: 1.5;
+  --line-relaxed: 1.6;
+
+  /* 兼容：原语义 + 正文字体栈 */
+  --astrocyte-neural-purple-dim: var(--astrocyte-purple-a-35);
+  --font-body: 'Inter', -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif;
+  --font-mono: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace;
+  --astrocyte-font-sans: var(--font-body);
+  --astrocyte-font-mono: var(--font-mono);
+  --astrocyte-bb-fg: #d3b8ff;
+  --astrocyte-user-fg: #94a3b8;
+  --astrocyte-read-fg: #e2e8f0;
+  --astrocyte-read-fg-muted: #94a3b8;
+  --astrocyte-surface-text: #d4d4d4;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  height: 100%;
+  background-color: var(--surface-body);
+  font-family: var(--font-body);
+  color: var(--astrocyte-surface-text);
+}
+
+body {
+  overflow: hidden;
+}
+
+/* Timeline Webview: kill app.css html/body chrome so the OS glass stays truly empty */
+html.timeline-route-host {
+  color-scheme: dark;
+}
+
+html.timeline-route-host,
+html.timeline-route-host body {
+  background-color: transparent !important;
+  background: transparent !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  box-shadow: none !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  overflow: hidden !important;
+  pointer-events: none !important;
+}
+
+/* Sidebar fade container */
+.fade-container {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.3s ease;
+}
+
+.fade-container.visible {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+/* ─── Monospace domain: 顶栏信道、输入轨、时间轴时间码、侧栏番茄钟 ─── */
+.hud-header {
+  font-family: var(--font-mono);
+}
+
+.hud-input-wrap {
+  font-family: var(--font-mono);
+}
+
+.hud-input-wrap .hud-input {
+  font-family: var(--font-mono);
+  line-height: 1.45;
+}
+
+.hud-input-wrap .hud-input::placeholder {
+  font-family: var(--font-mono);
+  letter-spacing: 0.02em;
+}
+
+.hud-input-wrap .persona-quick-switch {
+  font-family: var(--font-mono);
+}
+
+/* ─── Sprint 2：按钮基类（组合 .btn / .btn--*，无预处理器 @extend）─── */
+button.btn,
+.btn {
+  font-family: inherit;
+  color: var(--astrocyte-neural-purple);
+  border: 1px solid var(--border-muted);
+  border-radius: var(--radius-sm);
+  padding: var(--space-1) var(--space-3);
+  font-size: var(--font-sm);
+  line-height: 1.3;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease, box-shadow 0.15s ease, color 0.15s ease;
+  background: transparent;
+  box-sizing: border-box;
+}
+
+button.btn:hover:not(:disabled),
+.btn:hover:not(:disabled) {
+  border-color: var(--astrocyte-purple-border);
+  background: var(--astrocyte-purple-subtle);
+}
+
+button.btn:disabled,
+.btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.btn--hud {
+  font-size: var(--font-xs);
+  padding: var(--space-1) var(--space-2);
+  font-family: var(--font-mono);
+  line-height: 1.2;
+}
+
+.btn--icon {
+  width: 14px;
+  height: 14px;
+  min-width: 14px;
+  min-height: 14px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 9px;
+  line-height: 1;
+  font-family: var(--font-mono);
+  font-weight: 500;
+  border-color: var(--astrocyte-purple-a-45);
+  background: var(--surface-chrome-88);
+}
+
+button.btn--icon:hover:not(:disabled),
+.btn--icon:hover:not(:disabled) {
+  border-color: var(--astrocyte-purple-a-80);
+  background: var(--surface-chrome-92);
+}
+
+.btn--primary {
+  background: var(--astrocyte-neural-purple);
+  border-color: var(--astrocyte-neural-purple);
+  color: #000;
+  font-weight: 600;
+}
+
+button.btn--primary:hover:not(:disabled),
+.btn--primary:hover:not(:disabled) {
+  background: var(--astrocyte-purple-a-86);
+  border-color: var(--astrocyte-purple-a-90);
+  color: #000;
+}
+
+/* 设置面板等：破坏性操作 */
+.btn-danger {
+  border-color: var(--error);
+  background: var(--error-surface);
+  color: var(--error-fg);
+  font: inherit;
+  font-size: 11px;
+  padding: var(--space-2) var(--space-2);
+  cursor: pointer;
+  transition: border-color 120ms ease, background 120ms ease;
+}
+
+button.btn-danger:hover:not(:disabled),
+.btn-danger:hover:not(:disabled) {
+  border-color: #f87171;
+  background: var(--surface-danger-surface);
+}
+
+button.btn-danger:disabled,
+.btn-danger:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+/* HUD：Persona / Skill 赛博下拉（手术 B2） */
+.persona-selector,
+.skill-selector {
+  position: relative;
+}
+
+.persona-trigger,
+.skill-trigger {
+  width: 100%;
+  min-width: 0;
+  text-align: left;
+  background: var(--surface-inset-soft);
+  border: 1px solid var(--astrocyte-purple-a-30);
+  color: var(--astrocyte-neural-purple);
+  font: inherit;
+  font-size: 10px;
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-1);
+}
+
+/* 触发器内：横向「数字 + 单位」，与面板 `.stat-item` 区分 */
+.skill-trigger-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  align-items: baseline;
+}
+
+.skill-trigger-stats .stat-item--inline {
+  flex-direction: row;
+  align-items: baseline;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+.skill-trigger-stats .stat-item--inline .stat-value {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--astrocyte-purple-a-92);
+  font-variant-numeric: tabular-nums;
+}
+
+.skill-trigger-stats .stat-item--inline .stat-label {
+  margin-top: 0;
+  font-size: 8px;
+  color: var(--astrocyte-purple-a-55);
+  letter-spacing: 0.04em;
+}
+
+.persona-trigger:hover,
+.skill-trigger:hover {
+  border-color: var(--astrocyte-neural-purple);
+  box-shadow: 0 0 8px var(--astrocyte-purple-a-30);
+}
+
+.persona-trigger:focus-visible,
+.skill-trigger:focus-visible {
+  outline: 1px solid var(--astrocyte-purple-a-75);
+  outline-offset: 2px;
+}
+
+.persona-label,
+.skill-label {
+  color: var(--astrocyte-purple-a-95);
+}
+
+.persona-label-empty,
+.skill-label-empty {
+  color: var(--astrocyte-purple-a-45);
+}
+
+/* Persona 下拉 + Skill 面板：Sprint 2 统一样式 */
+.persona-dropdown,
+.skill-panel {
+  background: var(--surface-2);
+  border: 1px solid var(--border-hud);
+  border-radius: var(--radius-md);
+  padding: var(--space-3);
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
+  z-index: 1000;
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.45);
+  overflow-y: auto;
+}
+
+/* 底部空间不足时由 Svelte 加 .drop-up，向上展开避免窗口裁切 */
+.persona-dropdown {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  min-width: 100%;
+  max-height: 250px;
+  margin-top: var(--space-1);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.persona-dropdown.drop-up {
+  top: auto;
+  bottom: 100%;
+  margin-top: 0;
+  margin-bottom: var(--space-1);
+}
+
+/* Skill：可展开列表（Flex 行卡，与 Persona 列表分离） */
+.skill-selector-container {
+  position: relative;
+}
+
+.skill-panel {
+  position: absolute;
+  top: calc(100% + var(--space-2));
+  left: 0;
+  right: 0;
+  max-height: 400px;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.skill-panel.skill-panel--drop-up {
+  top: auto;
+  bottom: calc(100% + var(--space-2));
+}
+
+/* 内层卡片：Persona 项 + Skill 卡 */
+.persona-item,
+.skill-card {
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 100%;
+  background: var(--surface-3);
+  border: 1px solid var(--border-muted);
+  border-radius: var(--radius-sm);
+  padding: var(--space-3);
+  transition: border-color 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
+  cursor: pointer;
+}
+
+.persona-item:hover,
+.skill-card:hover {
+  border-color: var(--astrocyte-purple-border);
+  background: var(--astrocyte-purple-a-05);
+}
+
+.persona-item {
+  display: block;
+  margin: 0;
+  text-align: left;
+  font: inherit;
+  font-size: 10px;
+  color: var(--astrocyte-purple-a-92);
+  border: 1px solid var(--border-muted);
+}
+
+.persona-item:focus-visible {
+  outline: 1px solid var(--astrocyte-purple-a-50);
+  outline-offset: -1px;
+}
+
+.persona-item--active {
+  background: var(--astrocyte-purple-a-12);
+  border-color: var(--astrocyte-purple-a-40);
+  border-left: 2px solid var(--astrocyte-neural-purple);
+  padding-left: var(--space-3);
+  box-shadow: none;
+}
+
+.skill-card {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--space-2);
+  margin: 0;
+}
+
+.skill-card.active {
+  background: var(--astrocyte-purple-a-08);
+  border-color: var(--astrocyte-purple-a-60);
+}
+
+.skill-card:focus-visible {
+  outline: 1px solid var(--astrocyte-purple-a-75);
+  outline-offset: 2px;
+}
+
+/* 第 1 行：标题独占一行 */
+.skill-name {
+  margin: 0;
+  font-size: 0.68rem;
+  font-weight: 500;
+  color: #d0c8e0;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-family: var(--font-mono);
+  min-width: 0;
+  width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 第 2 行：分类标签 + 统计数据 */
+.skill-meta-row {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  min-width: 0;
+  flex-wrap: wrap;
+}
+
+.skill-category {
+  font-size: 0.62rem;
+  line-height: 1.15;
+  padding: var(--radius-xs) var(--space-1);
+  background: var(--astrocyte-purple-a-15);
+  border-radius: var(--radius-xs);
+  color: var(--astrocyte-neural-purple);
+  text-transform: lowercase;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  align-self: center;
+}
+
+/* 第 3 行：描述置底（默认 2 行；不受父级 HUD uppercase 影响） */
+.skill-desc {
+  margin: 0;
+  font-size: 0.65rem;
+  color: #888;
+  line-height: 1.35;
+  min-width: 0;
+  text-transform: none;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: normal;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+/* 元数据行内：统计区靠右，与左侧标签同一中线对齐 */
+.skill-meta-row .skill-stats {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex-shrink: 0;
+  margin-left: auto;
+}
+
+/* 卡片内统计：与 .skill-category 同量级字号，横向「数字 + 单位」单行 */
+.skill-meta-row .stat-item {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: var(--radius-xs);
+  min-width: 0;
+}
+
+.skill-meta-row .stat-value {
+  font-size: 0.62rem;
+  font-weight: 600;
+  line-height: 1.15;
+  color: var(--astrocyte-neural-purple);
+  font-variant-numeric: tabular-nums;
+  font-family: var(--font-mono);
+}
+
+.skill-meta-row .stat-label {
+  font-size: 0.62rem;
+  line-height: 1.15;
+  color: #666;
+  margin-top: 0;
+  font-family: var(--font-mono);
+}
+
+.stat-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-width: 50px;
+}
+
+.stat-value {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--astrocyte-neural-purple);
+  font-variant-numeric: tabular-nums;
+  font-family: var(--font-mono);
+}
+
+.stat-label {
+  font-size: 0.7rem;
+  color: #666;
+  margin-top: var(--radius-xs);
+  font-family: var(--font-mono);
+}
+
+/* Oligo 分段遥测：可反馈阶段卡片 */
+.hud-output .stage-card {
+  padding: var(--space-3);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-hud-emphasis);
+  background: var(--surface-3);
+  margin: 0 0 0.5em;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+.hud-output .stage-card .stage-header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-bottom: var(--space-2);
+  flex-wrap: wrap;
+}
+
+.hud-output .stage-card .stage-label {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--astrocyte-purple-a-90);
+}
+
+.hud-output .stage-card .stage-name {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  color: #d0c8e0;
+}
+
+.hud-output .stage-card .stage-content {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: rgba(200, 200, 210, 0.85);
+  line-height: 1.4;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.hud-output .stage-card .stage-feedback {
+  display: flex;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+}
+
+/* 与 .btn .btn--hud 组合使用；此处仅修正 Stage 内尺度 */
+.hud-output .stage-card .stage-fb {
+  min-width: 28px;
+  font-size: 12px;
+  line-height: 1;
+  border-radius: var(--radius-sm);
+}
+
+.hud-output .stage-card .stage-fb:hover:not(:disabled) {
+  border-color: var(--astrocyte-neural-purple);
+  background: var(--astrocyte-purple-a-08);
+}
+
+.hud-output .stage-card .stage-feedback-done {
+  margin-top: var(--space-2);
+  font-family: var(--font-mono);
+  font-size: 9px;
+  color: var(--astrocyte-purple-a-65);
+}
+
+.sidebar-timer {
+  font-family: var(--font-mono);
+}
+
+/* Sidebar: Memory Matrix — 纵向列表平滑滚动且不显示滚动条 */
+.sidebar-memory-matrix-scroll {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.sidebar-memory-matrix-scroll::-webkit-scrollbar {
+  display: none;
+  width: 0;
+  height: 0;
+}
+
+.timeline-wrapper .tooltip .snippet {
+  font-family: var(--font-body);
+  line-height: var(--line-normal);
+}
+
+/* Code & telemetry: always monospace */
+pre,
+code,
+kbd,
+samp {
+  font-family: var(--font-mono);
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--astrocyte-purple-a-35) var(--surface-scrollbar-track);
+}
+
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+*::-webkit-scrollbar-track {
+  background: var(--surface-scrollbar-track);
+}
+
+*::-webkit-scrollbar-thumb {
+  background: var(--astrocyte-purple-a-35);
+  border: 1px solid var(--border-scrollbar);
+}
+
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus {
+  -webkit-text-fill-color: #e2e8f0;
+  transition: background-color 9999s ease-out 0s;
+}
+
+/* Chat: 正文 user/bb 用 Inter 栈 + 行高呼吸感；系统行保持终端等宽 */
+.hud-output article.msg-row .msg-content {
+  font-size: 14px;
+  color: var(--astrocyte-read-fg);
+}
+
+.hud-output article.msg-row .msg-content[data-sender='user'],
+.hud-output article.msg-row .msg-content[data-sender='bb'] {
+  font-family: var(--font-body);
+  line-height: var(--line-relaxed);
+  letter-spacing: 0.015em;
+}
+
+.hud-output article.msg-row .msg-content[data-sender='user'] {
+  color: var(--astrocyte-user-fg);
+}
+
+.hud-output article.msg-row .msg-content[data-sender='bb'] {
+  color: var(--astrocyte-bb-fg);
+  text-shadow: 0 0 18px var(--astrocyte-purple-a-12);
+}
+
+.hud-output article.msg-row .msg-content[data-sender='system'] {
+  font-family: var(--font-mono);
+  line-height: var(--line-normal);
+  letter-spacing: 0.04em;
+  font-size: 13px;
+  color: var(--astrocyte-purple-a-82);
+}
+
+.hud-output .msg-content p {
+  margin-top: 0.35em;
+  margin-bottom: 1.25em;
+}
+
+.hud-output .msg-content code {
+  font-family: var(--font-mono);
+  letter-spacing: 0;
+  background: var(--astrocyte-purple-a-15);
+  color: #d3b8ff;
+  border-radius: var(--radius-3);
+  padding: 0.08em 0.3em;
+}
+
+.hud-output .msg-content pre {
+  margin: 0.4em 0;
+  padding: var(--space-3);
+  background: var(--surface-code);
+  border-radius: var(--radius-md);
+  overflow-x: auto;
+  border: 1px solid var(--astrocyte-purple-a-20);
+  font-family: var(--font-mono);
+  letter-spacing: 0;
+  line-height: var(--line-normal);
+}
+
+.hud-output .msg-content pre code {
+  display: block;
+  background: transparent;
+  color: inherit;
+  border-radius: 0;
+  padding: 0;
+  font-family: var(--font-mono);
+  letter-spacing: 0;
+}
+
+.hud-output .msg-content .katex {
+  color: inherit;
+  text-shadow: 0 0 10px rgba(229, 208, 255, 0.22);
+}
+
+.hud-output .msg-content .katex .mord,
+.hud-output .msg-content .katex .mbin,
+.hud-output .msg-content .katex .mrel {
+  color: #e5d0ff;
+}
+
+.hud-output .msg-content .katex-display {
+  margin: 0.45em 0;
+  padding: 0.18em 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+/* Fire Selector: 双模火力选择器 */
+.header-right {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-3);
+  -webkit-app-region: no-drag;
+}
+
+.hud-header-brand {
+  font-family: var(--font-mono);
+  letter-spacing: 0.1em;
+}
+
+.fire-selector {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: var(--space-1) var(--space-2);
+  border: 1px solid var(--astrocyte-purple-a-20);
+  background: transparent;
+  color: var(--astrocyte-purple-a-28);
+  cursor: pointer;
+  -webkit-app-region: no-drag;
+  transition: color 0.2s ease, opacity 0.2s ease, text-shadow 0.2s ease, border-color 0.2s ease;
+}
+
+.fire-selector:hover {
+  color: var(--astrocyte-purple-a-55);
+  border-color: var(--astrocyte-purple-a-35);
+}
+
+.fire-selector.active {
+  color: #ffffff;
+  border-color: var(--astrocyte-purple-a-50);
+  text-shadow:
+    0 0 8px rgba(255, 255, 255, 0.9),
+    0 0 14px var(--astrocyte-purple-a-60),
+    0 0 22px rgba(150, 100, 255, 0.35);
+}
+
+.fire-selector.active:hover {
+  text-shadow:
+    0 0 10px rgba(255, 255, 255, 1),
+    0 0 18px var(--astrocyte-purple-a-75),
+    0 0 28px rgba(150, 100, 255, 0.45);
+}
+
+/* Oligo tool trace: scan-line telemetry — no panel chrome, monospace glow + breath */
+.system-log-raw {
+  --system-log-fg: #7aa2f7;
+  --system-log-glow: rgba(122, 162, 247, 0.35);
+  position: relative;
+  display: block;
+  width: 100%;
+  margin: 0.85rem 0 1rem;
+  padding: 0.15rem 0 0.15rem 0.35rem;
+  border: none;
+  background: transparent;
+  color: var(--system-log-fg);
+  font-size: 0.8rem;
+  line-height: 1.45;
+  font-family: var(--font-mono);
+  letter-spacing: 0.04em;
+  white-space: pre-wrap;
+  word-break: break-word;
+  clear: both;
+  text-shadow:
+    0 0 6px var(--system-log-glow),
+    0 0 14px rgba(137, 220, 235, 0.12);
+  animation: system-log-scan-breathe 2.8s ease-in-out infinite;
+}
+
+.system-log-raw::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: linear-gradient(
+    180deg,
+    transparent,
+    rgba(137, 220, 235, 0.35) 35%,
+    rgba(122, 162, 247, 0.55) 50%,
+    rgba(137, 220, 235, 0.25) 65%,
+    transparent
+  );
+  opacity: 0.65;
+  pointer-events: none;
+}
+
+.system-log-raw::after {
+  content: '_';
+  display: inline-block;
+  margin-left: 0.15em;
+  color: rgba(137, 220, 235, 0.85);
+  font-weight: 400;
+  animation: system-log-cursor-blink 0.88s step-end infinite;
+}
+
+.system-log-raw .system-log-glyph,
+.system-log-raw .system-log-label,
+.system-log-raw .system-log-payload-dim,
+.system-log-raw .system-log-fallback {
+  font-family: var(--font-mono);
+}
+
+.system-log-glyph {
+  margin-right: 0.35em;
+  color: rgba(137, 220, 235, 0.42);
+  font-weight: 500;
+  letter-spacing: 0.02em;
+}
+
+.system-log-label {
+  color: #89dceb;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-shadow:
+    0 0 8px rgba(137, 220, 235, 0.35),
+    0 0 12px rgba(122, 162, 247, 0.2);
+}
+
+.system-log-payload-dim {
+  color: rgba(122, 162, 247, 0.42);
+  font-weight: 400;
+  text-shadow: none;
+}
+
+.system-log-fallback {
+  color: rgba(122, 162, 247, 0.78);
+  font-weight: 400;
+}
+
+@keyframes system-log-scan-breathe {
+  0%,
+  100% {
+    opacity: 0.62;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+@keyframes system-log-cursor-blink {
+  0%,
+  49% {
+    opacity: 1;
+  }
+  50%,
+  100% {
+    opacity: 0.12;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .system-log-raw {
+    animation: none;
+    opacity: 0.92;
+  }
+
+  .system-log-raw::after {
+    animation: none;
+    opacity: 0.7;
+  }
+}
+
+/* Session HUD lines & timeline stamps — rack-clock monospace */
+.archive-banner {
+  font-family: var(--font-mono);
+  letter-spacing: 0.1em;
+}
+
+.timeline-wrapper .tooltip .time {
+  font-family: var(--font-mono);
+  letter-spacing: 0.06em;
+}
+
+/* Timeline absolute-void guard: keep outer physical area fully transparent */
+.fade-container {
+  background: transparent !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  box-shadow: none !important;
+}
+
+html.timeline-route-host .fade-container {
+  background-color: transparent !important;
+  background: transparent !important;
+}
+
+/* Timeline window only: .fade-container.visible must NOT steal clicks on the wide transparent glass */
+html.timeline-route-host .fade-container.visible {
+  pointer-events: none !important;
+}
+
+/* Critical override — idle: concealed slash glyph; hover: sever-connection bloom + jitter */
+.override-guillotine {
+  flex-shrink: 0;
+  align-self: flex-end;
+  margin-bottom: var(--space-3);
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  min-width: 2.75rem;
+  min-height: 1.35rem;
+  padding: var(--space-1) var(--radius-xs);
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  -webkit-app-region: no-drag;
+}
+
+.override-guillotine__idle {
+  display: inline-block;
+  color: #8b0000;
+  text-shadow:
+    0 0 3px rgba(139, 0, 0, 0.45),
+    0 0 8px rgba(90, 0, 0, 0.35);
+  opacity: 1;
+  transform: scale(1);
+  transition:
+    opacity 0.2s ease,
+    transform 0.22s cubic-bezier(0.4, 0, 0.2, 1),
+    filter 0.2s ease;
+  white-space: nowrap;
+}
+
+.override-guillotine__hot {
+  position: absolute;
+  right: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  display: inline-block;
+  white-space: nowrap;
+  color: #ff1520;
+  opacity: 0;
+  max-width: 0;
+  overflow: hidden;
+  pointer-events: none;
+  text-shadow:
+    0 0 6px rgba(255, 20, 40, 0.55),
+    0 0 14px rgba(200, 0, 30, 0.4);
+  transition:
+    opacity 0.22s ease,
+    max-width 0.32s cubic-bezier(0.22, 1, 0.36, 1),
+    filter 0.2s ease;
+  animation: none;
+}
+
+.override-guillotine:hover .override-guillotine__idle,
+.override-guillotine:focus-visible .override-guillotine__idle {
+  opacity: 0;
+  transform: scale(0.92);
+  pointer-events: none;
+}
+
+.override-guillotine:hover .override-guillotine__hot,
+.override-guillotine:focus-visible .override-guillotine__hot {
+  opacity: 1;
+  max-width: 22rem;
+  pointer-events: auto;
+  animation: override-guillotine-jitter 0.14s ease-in-out infinite;
+}
+
+.override-guillotine:focus-visible {
+  outline: 1px solid rgba(255, 30, 40, 0.4);
+  outline-offset: 2px;
+}
+
+.override-guillotine:active .override-guillotine__hot {
+  filter: brightness(1.15);
+}
+
+@keyframes override-guillotine-jitter {
+  0%,
+  100% {
+    text-shadow:
+      0.5px 0 5px rgba(255, 25, 35, 0.65),
+      -0.5px 0 6px rgba(255, 60, 70, 0.45),
+      0 0 12px rgba(180, 0, 20, 0.35);
+  }
+  33% {
+    text-shadow:
+      -0.5px 0 5px rgba(255, 35, 45, 0.7),
+      0.5px 0 7px rgba(255, 20, 30, 0.5),
+      0 0 14px rgba(220, 10, 30, 0.4);
+  }
+  66% {
+    text-shadow:
+      0 0.5px 6px rgba(255, 30, 40, 0.6),
+      0 -0.5px 5px rgba(255, 50, 60, 0.45),
+      0 0 10px rgba(160, 0, 25, 0.38);
+  }
+}
+
+/* Partial assistant text kept in UI after user abort — not written to JSONL */
+.hud-output article.msg-row[data-stream-aborted='true'] .msg-content {
+  opacity: 0.72;
+  text-decoration: line-through;
+  text-decoration-color: rgba(255, 51, 51, 0.45);
+}
+
+.hud-output article.msg-row[data-stream-aborted='true'] .msg-content::after {
+  content: ' // VOID_SNAPSHOT · NOT_PERSISTED';
+  display: block;
+  margin-top: 0.5em;
+  font-family: var(--font-mono);
+  font-size: 0.72em;
+  letter-spacing: 0.06em;
+  color: rgba(255, 51, 51, 0.65);
+  text-decoration: none;
+}
+
+/* Stream / Oligo fatal errors: isolated from assistant bubble (see +page.svelte sender === 'error') */
+.hud-output .error-card {
+  background: var(--error-surface);
+  border-left: 3px solid var(--error);
+  padding: var(--space-3);
+  margin: var(--space-2) 0;
+  border-radius: var(--radius-sm);
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  font-family: var(--font-mono);
+  font-size: 13px;
+  line-height: var(--line-normal);
+  color: var(--error-fg);
+}
+
+.hud-output .error-card .error-icon {
+  flex-shrink: 0;
+  line-height: 1.3;
+}
+
+.hud-output .error-card .error-text {
+  flex: 1;
+  min-width: 0;
+  word-wrap: break-word;
+  white-space: pre-wrap;
+}
+
+/* Active task overlay panel (Task SSE stream) */
+.active-task-panel {
+  position: fixed;
+  top: var(--space-4);
+  right: var(--space-4);
+  width: 320px;
+  max-width: calc(100vw - var(--space-6));
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  border: 1px solid var(--border-hud);
+  border-radius: var(--radius-md);
+  background: var(--surface-2);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  z-index: 1000;
+  box-sizing: border-box;
+}
+
+.task-row {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-2);
+  border-left: 2px solid var(--astrocyte-neural-purple);
+  border-radius: var(--radius-sm);
+  background: var(--surface-3);
+}
+
+.task-row.status-completed {
+  border-left-color: var(--feedback-good);
+}
+
+.task-row.status-failed {
+  border-left-color: var(--error);
+}
+
+.task-header {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: baseline;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.task-type {
+  font-family: var(--font-mono);
+  font-size: var(--font-xs);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--astrocyte-purple-a-86);
+  white-space: nowrap;
+}
+
+.task-stage {
+  font-family: var(--font-body);
+  font-size: var(--font-sm);
+  color: var(--astrocyte-read-fg);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.task-elapsed {
+  font-family: var(--font-mono);
+  font-size: var(--font-sm);
+  color: var(--astrocyte-neural-purple);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.task-progress-bar {
+  width: 100%;
+  height: 2px;
+  border-radius: 999px;
+  background: var(--surface-progress-track);
+  overflow: hidden;
+}
+
+.task-progress-fill {
+  height: 2px;
+  background: linear-gradient(
+    90deg,
+    var(--astrocyte-accent-violet),
+    var(--astrocyte-accent-cyan)
+  );
+  transition: width 0.3s ease;
+}
+
+.task-error {
+  font-family: var(--font-mono);
+  font-size: var(--font-xs);
+  color: var(--error-fg);
+  word-break: break-word;
+}
+
+/* Per-tool invoke telemetry (IR.3, Oligo agent SSE; session-scoped) */
+.active-tool-telemetry {
+  position: fixed;
+  top: calc(var(--space-4) + 168px);
+  right: var(--space-4);
+  width: 320px;
+  max-width: calc(100vw - var(--space-6));
+  z-index: 999;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--border-hud);
+  border-radius: var(--radius-md);
+  background: var(--surface-2);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  box-sizing: border-box;
+  pointer-events: none;
+}
