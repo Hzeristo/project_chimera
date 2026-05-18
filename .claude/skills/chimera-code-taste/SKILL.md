@@ -1,6 +1,6 @@
 ---
 name: chimera-code-taste
-description: Code and UI taste rules for Chimera. Invoke when writing, editing, or reviewing code. Enforces DDD layering, naming discipline, exception propagation, design tokens, and structured logging.
+description: Code and UI taste enforcement during sprint execution within a batch. Invoke when executing approved sprints batch-style. Enforces DDD layering, naming, exception propagation, design tokens, structured logging.
 allowed-tools:
   - Read
   - Grep
@@ -8,69 +8,71 @@ allowed-tools:
   - Edit
   - MultiEdit
   - Write
+  - Task
   - Bash(pytest:*, ruff:*, mypy:*, git diff:*, git show:*, git status:*, ./scripts/check_taste.sh:*)
 ---
 
 <skill_identity>
-Taste arbiter for Project Chimera. Modify code, review code, enforce taste rules. Operating premise: explicit simplicity over clever abstraction, token-based design over ad-hoc colors, structured exceptions over silent swallowing, grep-able logs over print debugging.
+Taste arbiter executing pre-approved sprints in batch. Modifies code, runs verification, returns structured summaries. Each sprint commits independently. Halts batch on red-line violation.
 </skill_identity>
 
 <bootstrap_protocol>
-On activation:
-1. `Read("CLAUDE.md")`
-2. Read relevant `docs/ARCHITECTURE/*.md` based on edit target:
-   - `prompt_composer.py` → `PROMPT_MIDDLEWARE.md`
-   - `tool_protocol.py` → `TOOL_PROTOCOL.md`
-   - `agent.py` main loop → `INTENT_AND_DEGRADATION.md`
-   - `task_service.py` → `TASK_PROGRESS_SYSTEM.md`
+On activation, read CLAUDE.md and the architecture doc(s) relevant to current sprint target:
+- prompt_composer.py → docs/ARCHITECTURE/PROMPT_MIDDLEWARE.md
+- tool_protocol.py → docs/ARCHITECTURE/TOOL_PROTOCOL.md
+- agent.py main loop → docs/ARCHITECTURE/INTENT_AND_DEGRADATION.md
+- task_service.py → docs/ARCHITECTURE/TASK_PROGRESS_SYSTEM.md
 
-Do NOT modify `docs/ARCHITECTURE/*.md` unless current sprint scope explicitly includes documentation update.
+Verify Python env path is declared in CLAUDE.md (else STOP and ask user).
 </bootstrap_protocol>
 
 <invocation_modes>
 
-| User input pattern | Mode | Process reference | Template |
+| User input pattern | Mode | Process | Template |
 |---|---|---|---|
-| "implement X", "add Y", "fix Z" + file scope | Modification | `references/modification-process.md` | `assets/modification-summary-template.md` |
-| "review changes", "审一下", "check my code" | Self-check | `references/self-check-process.md` | `assets/self-review-verdict-template.md` |
-| "refactor X" without declared refactor sprint | Refusal | (ask for sprint declaration) | — |
+| "execute sprint {N}", "execute batch {phase}", "run FC.{N..M}" | batch_execution | references/batch-execution-process.md | assets/modification-summary-template.md |
 
 </invocation_modes>
 
-<process_overview>
-**Modification mode** — Read source + tests in full, Grep call sites before rename, apply edits via Edit/MultiEdit, verify via `scripts/check_taste.sh`, emit summary.
+<subagent_routing>
+Spawn subagents (Task tool, general-purpose, model: Haiku) for:
+- Running check_taste.sh and parsing output
+- Running pytest suite and summarizing failures
+- Cross-file rule violation scanning
 
-**Self-check mode** — Diff scope, run rule checks via Grep, categorize each rule as Pass/Accepted/Fail, recommend minimal patches.
+Do NOT spawn subagent for:
+- Editing code (Edit/MultiEdit/Write must be main session)
+- Reading source files for editing context
+- Self-check rule application (the rule application IS the reasoning)
 
-Detailed rules and examples: `references/taste-rules.md` and `references/anti-patterns.md`. UI-specific tokens: `references/ui-design-tokens.md`.
-</process_overview>
+Subagents return only: pass/fail, failure summaries, file:line of violations.
+</subagent_routing>
 
 <core_principles>
 1. **DDD layering** — core → ports → services. One direction.
-2. **Rule of three** — abstraction requires 3 concrete call sites. Inline until then.
-3. **No escape hatches** — `Any`, `BaseException`, magic numbers must be justified.
-4. **Design tokens exclusive** — UI uses only `--astrocyte-*` and `--surface-*` tokens.
+2. **Rule of three** — abstraction requires 3 concrete call sites.
+3. **No escape hatches** — Any, BaseException, magic numbers must be justified.
+4. **Design tokens exclusive** — UI uses only --astrocyte-* and --surface-* tokens.
 5. **Structured logs** — bracket prefix on every log line.
+6. **Halt on red line** — first sprint in batch that violates a red line stops the entire batch.
 </core_principles>
 
 <rules_summary>
-Full rules with bad/good examples: `references/taste-rules.md`.
+Full rules with bad/good examples: references/taste-rules.md, references/anti-patterns.md, references/ui-design-tokens.md.
 
 **Quick do:**
 - Read files in full before editing
 - Grep call sites before renaming
-- Run `./scripts/check_taste.sh {file}` after changes
+- Run check_taste.sh after changes
 - Bracket-prefix every log
-- Re-raise `CancelledError` and `CLIENT_GONE_EXCEPTIONS`
-- Use `var(--token)` in CSS
-- Inline until 3rd concrete use
+- Re-raise CancelledError + CLIENT_GONE_EXCEPTIONS
+- Use var(--token) in CSS
 
 **Quick do-not:**
-- `except BaseException`
+- except BaseException
 - Invent UI colors
 - Encode call path in function names
 - Extract helpers from one call site
 - Mix refactor with feature work
-- Use `Any` without a Protocol
-- Write tests via `__main__`
+- Use Any without a Protocol
 </rules_summary>
