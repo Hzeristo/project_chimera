@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python -c \"from tests.oligo.conftest import MockLLMClient; c = MockLLMClient\\(probe_response='<CMD:search_vault>', final_response='done'\\); print\\('ok'\\)\")",
+      "Bash(python -c \"import sys; print\\(sys.executable\\)\")",
+      "Skill(chimera-core-philosophy)",
+      "Skill(chimera-sprint-discipline)",
+      "Skill(chimera-code-taste)",
+      "Bash(conda run *)"
+    ]
+  }
+}
