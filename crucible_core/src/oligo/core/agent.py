@@ -425,6 +425,12 @@ class ChimeraAgent:
         self.max_turns = max_turns
         self._metrics_service = metrics_service
 
+        # FC.2a: per-request artifact accumulator. Populated after each turn's wash;
+        # emitted once as `bb-message-artifacts` before the success-path return.
+        # Never enters self.messages or any LLM payload.
+        self._session_artifacts: list[Artifact] = []
+        self._artifact_keys: set[tuple[str, str]] = set()
+
         router_body = self._build_router_system_prompt()
 
         self.messages: list[ChatMessage] = [
@@ -996,6 +1002,25 @@ class ChimeraAgent:
             self._maybe_record_wash(len(raw_result), len(degraded), tool_name)
             return degraded
 
+    def _accumulate_artifacts(
+        self, results: list[ExecutedToolResult]
+    ) -> None:
+        """FC.2a: collect artifacts post-wash, deduped by ``(kind, path)``.
+
+        Called once per turn after ``_wash_tool_results`` returns. Never touches
+        ``self.messages``; the accumulator is emitted as a single
+        ``bb-message-artifacts`` SSE frame before the success-path return.
+        """
+        for er in results:
+            if not er.artifacts:
+                continue
+            for art in er.artifacts:
+                key = (art.kind, art.path)
+                if key in self._artifact_keys:
+                    continue
+                self._artifact_keys.add(key)
+                self._session_artifacts.append(art)
+
     async def _wash_tool_results(
         self,
         results: list[ExecutedToolResult],
@@ -1227,6 +1252,8 @@ class ChimeraAgent:
                     executed_results, wash_context
                 )
 
+                self._accumulate_artifacts(executed_results)
+
                 if not wash_events:
                     yield _sse_data(
                         _sys_telemetry_obj(
@@ -1364,6 +1391,19 @@ class ChimeraAgent:
                 chunk = stream_body[i : i + chunk_size]
                 yield _sse_chunk(chunk)
                 await asyncio.sleep(0.04)
+
+            # FC.2a: emit aggregated artifacts as a single SSE frame on the
+            # success path, after final chunks and before return. Empty list
+            # → no frame (audit Q3, cross-finding 4).
+            if self._session_artifacts:
+                yield sse_event(
+                    "bb-message-artifacts",
+                    {
+                        "artifacts": [
+                            a.model_dump() for a in self._session_artifacts
+                        ],
+                    },
+                )
 
             logger.debug(f"[Oligo] Theater concluded on turn {turn}.")
             return

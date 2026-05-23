@@ -31,6 +31,11 @@ Bash("git log {first_sprint_commit}..HEAD --stat")
 For halted batch: identify which sprints completed vs which never ran.
 </step>
 
+<step n="1+">
+For each completed sprint, also Read `docs/sprints/phase-{X.Y}/{sprint-id}.md`
+to recover per-sprint verification context the commit body could not hold.
+</step>
+
 <step n="2">
 Read phase audit to recover original questions and cross-findings.
 Read batch plan to recover declared red lines and acceptance criteria per sprint.

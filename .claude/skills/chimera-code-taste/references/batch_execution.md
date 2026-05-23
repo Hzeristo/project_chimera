@@ -41,8 +41,12 @@ If self-check reveals red-line violation:
 
 <step n="6">
 If self-check passes:
-  - Output sprint summary (modification-summary-template.md)
-  - Commit with Tier-2 message including sprint id
+  - Write sprint summary to `docs/sprints/phase-{X.Y}/{sprint-id}.md`
+    using assets/modification-summary-template.md
+  - Stage all sprint files + the summary doc
+  - Commit with Tier-2 message:
+    - Subject: `feat({scope}): {sprint-id} — {one_line}`
+    - Body: 3-5 line summary + `Refs: docs/sprints/phase-{X.Y}/{sprint-id}.md`
   - Proceed to next sprint
 </step>
 
