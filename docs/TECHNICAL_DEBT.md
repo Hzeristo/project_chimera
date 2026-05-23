@@ -18,6 +18,7 @@ Items found during review or use that are NOT accepted partials. These are defic
 | DEBT-006 | UI residue | Stage cards persist across sessions until manually cleared; no automatic cleanup older than N days | Very Low | Backlog |
 | DEBT-007 | III.B.3 review (IR.3.1 boundary case) | Tool telemetry doesn't cover *parsing-stage* failures (malformed XML before any plan is built); only execution-stage covered | Low | Next debt week if frictions arise |
 | DEBT-008 | PaperMiner-era env / CLAUDE.md TBD | Replace inherited PaperMiner conda environment with a clean `uv`-managed `.venv` pinned to `pyproject.toml` only | Medium | Debt week: audit conda packages and classify Chimera-used vs leftover; create `.venv/` via uv; run full test + smoke suite; set declared env path in CLAUDE.md; archive (not delete) old conda env |
+| DEBT-009 | FC.2a smoke work (May 2026) | FC.2a smoke test stalled: mock never transitions to PASS, exhausting `max_turns`. Roots: (a) `conftest.MockLLMClient` lacks PASS-switch logic (b) workaround only exists in `agent.py` `__main__`; testing via `__main__` is an antipattern (c) `test_run_theater_with_tool_calls_executes_and_streams` may hide the mock gap | Medium | Unify mock harness; add PASS-switch (or equivalent) on `MockLLMClient`; debt week remove `__main__`-oriented test code from agent |
 
 ---
 

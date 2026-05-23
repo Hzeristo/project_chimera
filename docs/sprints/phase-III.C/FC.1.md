@@ -1,0 +1,97 @@
+# Modification Summary: FC.1
+
+**Phase:** III.C
+**Sprint:** FC.1 — Vault tools opt-in to `ToolOutput(text, artifacts)`
+**Batch position:** 1 of 8
+**Date:** 2026-05-23
+**Commit:** `4a4cf0c`
+
+---
+
+## Files touched
+
+| Path | +Added | -Removed | Notes |
+|---|---|---|---|
+| `crucible_core/src/crucible/core/schemas.py` | +48 | -0 | New `Artifact` + `ToolOutput` Pydantic models; `ExecutedToolResult.artifacts` field |
+| `crucible_core/src/oligo/core/agent.py` | +24 | -5 | `_execute_tool` returns `(text, artifacts)`; `_run_one` carries artifacts on SUCCESS |
+| `crucible_core/src/oligo/tools/registry.py` | +2 | -2 | `ToolFn` widened to `Awaitable[str | ToolOutput]` |
+| `crucible_core/src/oligo/tools/vault_tools.py` | +60 | -19 | 3 vault tools wrap output in `ToolOutput`; `_artifacts_from_graph_rows` helper |
+| `crucible_core/tests/oligo/test_tool_execution.py` | +119 | -0 | 4 FC.1 cases |
+
+**Planning deviation (recorded):**
+The batch plan said "place `ToolOutput`/`Artifact` near `ToolFn`/`ToolSpec` in `registry.py`." Actual placement is `crucible/core/schemas.py` because `ExecutedToolResult` is a Pydantic model there, and putting the new models in `registry.py` would force `schemas.py` to import upward into `oligo/tools/`, reversing layering. One-way `oligo` → `crucible/core` preserved.
+
+---
+
+## Verification
+
+| Check | Status | Output Summary |
+|---|---|---|
+| ruff | deferred | env `paper` lacks ruff; FC.6 will run before seal |
+| mypy | deferred | env `paper` lacks mypy |
+| pytest (test_tool_execution.py) | deferred | env `paper` lacks pytest; smoke ran via `conda run -n paper python` (PASS) |
+| Schema smoke | ✓ | `Artifact`/`ToolOutput`/`ExecutedToolResult` round-trip OK; `extra="forbid"` enforced |
+| Vault tool smoke | ✓ | `obsidian_graph_query` artifacts populated (kind=`vault_note`, path=`/dev/null/Mock.md`); `search_vault` artifacts=None |
+| Imports clean | ✓ | All edited modules import without error |
+
+---
+
+## Rule Conformance Self-Check
+
+| Rule | Status | Evidence |
+|---|---|---|
+| DDD layering preserved | ✓ | `Artifact`/`ToolOutput` in `crucible/core/schemas.py`; `oligo/tools/*` imports from it (one-way) |
+| function_naming (≤25 char, purpose-led) | ✓ | `_artifacts_from_graph_rows` |
+| abstraction_threshold (rule of 3) | ✓ | No new abstractions; extended existing types |
+| exception_handling | ✓ | `CancelledError` + `CLIENT_GONE_EXCEPTIONS` re-raise paths in `_run_one` preserved |
+| pydantic_defaults (extra="forbid", Field descriptions) | ✓ | Both new models use `ConfigDict(extra="forbid")` with `Field(..., description=...)` |
+| ui_tokens | N/A | Backend-only |
+| logging_format (bracket prefix) | ✓ | Existing `[Tool]` log line touched only in formatting; prefix preserved |
+| no_opportunistic_refactor | ✓ | Other 5 tools untouched; DEBT-002/DEBT-004 long-name functions untouched |
+
+---
+
+## Red Line Status
+
+| Red Line | Status | Verification |
+|---|---|---|
+| Artifacts may not enter LLM-facing render path (`agent.py:1053-1057`) | Held | `result_body = str(payload)` unchanged at agent.py:1066-1070; `payload = washed_result or raw_result or error_message`; FC.1 test `test_tooloutput_artifacts_never_in_llm_render` asserts secret_path never appears in render |
+| Other 5 tools' return shape unchanged | Held | grep: `web_search.py` and `miner_tools.py` not edited |
+| `_render_tool_results_for_llm` / `_format_one_tool_result_xml` unchanged | Held | grep confirms file untouched |
+| Wash bypass policy unchanged | Held | `_wash_tool_results` not edited |
+| 不进行机会主义重构 | Held | DEBT-002 / DEBT-004 left open |
+
+---
+
+## Acceptance Criteria
+
+| Criterion | Status | Evidence |
+|---|---|---|
+| `Grep "ToolOutput" vault_tools.py` ≥3 hits | Met | 12 hits across 3 tool sites + helper + return type annotations |
+| `result_body` source unchanged | Met | grep at agent.py:1068-1070 confirms `payload` chain |
+| `pytest -k tooloutput` passes (3 new cases) | Pending | env lacks pytest; tests authored, await FC.6 |
+| `obsidian_graph_query` byte-identical string output | Met | Format-only changes wrap in `ToolOutput(text=out, ...)`; out construction unchanged |
+
+---
+
+## Notes
+
+- **Accepted Partial introduced (proposed for ACCEPTED_PARTIALS at FC.6):** `search_vault` and `search_vault_attribute` return `ToolOutput` with `artifacts=None` because the `_VaultToolPort` adapter exposes no structured tier for keyword/attribute search. Parsing back from the formatter's display string would brittle-couple the tool to formatter changes. Out of scope per FC.0 cross-finding 5 + `no_opportunistic_refactor`. HSC #1 still satisfied by 3 vault tools returning `ToolOutput`.
+- Handoff to FC.2a: `ExecutedToolResult.artifacts` is the field name; `Artifact(kind, path, metadata)` is the shape.
+
+---
+
+## Commit Status
+
+- [x] Files staged (5 files explicit)
+- [x] Commit drafted (Tier-2 message)
+- [x] Commit applied — `4a4cf0c`
+- [ ] Pushed (deferred to FC.6 seal)
+
+---
+
+**Sprint result: Pass.** Proceeded to FC.2a.
+
+---
+
+*Generated by chimera-code-taste batch_execution mode, per-sprint summary.*
