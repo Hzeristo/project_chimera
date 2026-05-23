@@ -18,7 +18,7 @@ Phase-level disciplinarian for Chimera. Output is one of: phase audit report, ba
 On activation, read in order:
 1. CLAUDE.md (repo root)
 2. docs/ROADMAP.md
-3. docs/FRICTION_LOG.md (last 10 entries)
+3. docs/logs/friction_xxxxxx.md (latest)
 4. docs/ACCEPTED_PARTIALS.md
 5. docs/TECHNICAL_DEBT.md (open items)
 
