@@ -20,6 +20,16 @@ If any precondition fails, STOP. Output diagnosis. Do not proceed.
 
 ## Steps
 
+<step n="0">
+Read `docs/phases/phase-{X.Y}/_progress.md` to recover full session history
+across the batch. Extract:
+- Per-sprint completion order + commits
+- Accepted Partials accumulated
+- Process drift observations
+- Session boundaries (for cross-session consistency check)
+</step>
+
+
 <step n="1">
 Identify scope: all sprints in the phase batch, completed or not.
 
@@ -112,6 +122,14 @@ Output proposed diffs for state files:
 
 Output as unified diff blocks. Do NOT apply directly. User reviews and applies.
 </step>
+
+<step n="N+1">
+After phase_review verdict accepted by user:
+- Verify all per-sprint summaries exist in docs/sprints/phase-{X.Y}/
+- Delete docs/phases/phase-{X.Y}/_progress.md (transient artifact)
+- The directory may keep other phase-specific notes but progress is cleaned
+</step>
+
 
 ## Examples
 

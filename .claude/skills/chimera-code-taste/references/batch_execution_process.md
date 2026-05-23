@@ -15,6 +15,17 @@ Trust comes from per-sprint commit isolation, not from per-sprint approval.
 
 For each sprint in batch order:
 
+<step n="0">
+Read `docs/phases/phase-{X.Y}/_progress.md` if exists.
+
+If exists: identify last completed sprint and assumed resumption point.
+Verify predecessor assumptions hold via Git log + targeted Greps.
+If holds → resume from next sprint. If broken → halt and surface to user.
+
+If not exists: this is a fresh batch start. Create the file with header.
+</step>
+
+
 <step n="1">
 Read sprint definition from batch plan. Confirm files-in-scope, red lines, acceptance.
 </step>
@@ -42,13 +53,29 @@ If self-check reveals red-line violation:
 <step n="6">
 If self-check passes:
   - Write sprint summary to `docs/sprints/phase-{X.Y}/{sprint-id}.md`
-    using assets/modification-summary-template.md
-  - Stage all sprint files + the summary doc
-  - Commit with Tier-2 message:
-    - Subject: `feat({scope}): {sprint-id} — {one_line}`
-    - Body: 3-5 line summary + `Refs: docs/sprints/phase-{X.Y}/{sprint-id}.md`
+  - **Append progress entry to `docs/phases/phase-{X.Y}/_progress.md`**
+    (one line: status + commit hash + accepted partials)
+  - Stage all sprint files + summary + progress entry
+  - Commit with Tier-2 message
   - Proceed to next sprint
 </step>
+
+<step n="N">
+Session boundary trigger: when context usage exceeds ~70% OR user explicitly
+invokes "session pause":
+
+  1. Append session-boundary entry to `docs/phases/phase-{X.Y}/_progress.md`:
+     - Sprints completed this session
+     - Cumulative accepted partials this session
+     - Process drift observations (e.g., hitched commits)
+     - Next session resumption point + predecessor assumptions to verify
+  2. Output brief summary in conversation
+  3. Hand off — do NOT continue past boundary in same session
+
+The next session bootstraps with `/clear`-equivalent (new session) and
+reads progress file at step 0 above.
+</step>
+
 
 ## After Batch
 
