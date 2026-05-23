@@ -3,7 +3,7 @@ use chrono::{SecondsFormat, Utc};
 use log::{debug, info, warn};
 use memory::{
     append_session_entries, delete_entry, delete_session_file, get_entries_for_session,
-    get_timeline_summaries, save_session_entries, ChatEntry, SessionSummary,
+    get_timeline_summaries, save_session_entries, Artifact, ChatEntry, SessionSummary,
 };
 use reqwest::header::AUTHORIZATION;
 use std::time::Duration;
@@ -629,6 +629,7 @@ async fn sync_session_history(
             content: e.content,
             session_id: normalized_session_id.clone(),
             persona: e.persona,
+            artifacts: None,
         })
         .collect();
 
@@ -670,6 +671,7 @@ fn build_entry(
     content: String,
     persona: Option<&str>,
     session_id: &str,
+    artifacts: Option<Vec<Artifact>>,
 ) -> ChatEntry {
     ChatEntry {
         id,
@@ -678,6 +680,7 @@ fn build_entry(
         content,
         session_id: session_id.to_string(),
         persona: persona.map(|value| value.to_string()),
+        artifacts,
     }
 }
 
@@ -866,7 +869,7 @@ async fn evaluate_payload(
     }
 
     tauri::async_runtime::spawn(async move {
-        let model_reply: Result<Option<String>, String> = if is_oligo_mode {
+        let model_reply: Result<Option<(String, Option<Vec<Artifact>>)>, String> = if is_oligo_mode {
             llm_client::stream_oligo_agent(
                 oligo_gateway_base_url.as_str(),
                 oligo_api_key,
@@ -906,10 +909,10 @@ async fn evaluate_payload(
                 cancel_token.clone(),
             )
             .await
-            .map(|s| Some(s))
+            .map(|s| Some((s, None)))
         };
 
-        let model_reply = match model_reply {
+        let (model_reply, model_artifacts) = match model_reply {
             Ok(None) => {
                 clear_abort_slot(&app_handle).await;
                 let user_id = user_message_id.unwrap_or_else(|| Uuid::new_v4().to_string());
@@ -919,11 +922,12 @@ async fn evaluate_payload(
                     user_input.clone(),
                     None,
                     &session_id,
+                    None,
                 )];
                 persist_chat_entries_non_blocking(session_id.clone(), user_entries);
                 return;
             }
-            Ok(Some(r)) => r,
+            Ok(Some((r, arts))) => (r, arts),
             Err(e) if e == llm_client::GENERATION_ABORTED => {
                 clear_abort_slot(&app_handle).await;
                 let user_id = user_message_id.unwrap_or_else(|| Uuid::new_v4().to_string());
@@ -933,6 +937,7 @@ async fn evaluate_payload(
                     user_input.clone(),
                     None,
                     &session_id,
+                    None,
                 )];
                 persist_chat_entries_non_blocking(session_id.clone(), user_entries);
                 let _ = app_handle.emit(
@@ -964,13 +969,14 @@ async fn evaluate_payload(
         let user_id = user_message_id.unwrap_or_else(|| Uuid::new_v4().to_string());
         let assistant_id = assistant_message_id.unwrap_or_else(|| Uuid::new_v4().to_string());
         let entries = vec![
-            build_entry(user_id, "user", user_input, None, &session_id),
+            build_entry(user_id, "user", user_input, None, &session_id, None),
             build_entry(
                 assistant_id,
                 "bb",
                 model_reply,
                 Some(&active_persona_id),
                 &session_id,
+                model_artifacts,
             ),
         ];
         persist_chat_entries_non_blocking(session_id.clone(), entries);

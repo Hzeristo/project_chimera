@@ -8,6 +8,8 @@ use serde_json::json;
 use tauri::{AppHandle, Emitter};
 use tokio_util::sync::CancellationToken;
 
+use crate::memory::Artifact;
+
 use crate::settings::ProviderConfig;
 use crate::state::Message;
 
@@ -226,7 +228,7 @@ pub async fn stream_direct_api(
 /// `api_key` / `base_url` / `model_name` 来自当前 Provider；`system_core` / skill / `persona` / `authors_note` 由调用方按注入协议装配；
 /// `messages` 仅含 user/assistant 与本轮 user，禁止预拼 System。
 ///
-/// - ``Ok(Some(text))``：正常结束（由上层再发 ``bb-stream-done`` DONE）。
+/// - ``Ok(Some((text, artifacts)))``：正常结束（由上层再发 ``bb-stream-done`` DONE）。
 /// - ``Ok(None)``：已收到服务端 ``event: bb-stream-done`` 并已 ``emit``，上层不得再发 DONE。
 pub async fn stream_oligo_agent(
     oligo_base_url: &str,
@@ -245,7 +247,7 @@ pub async fn stream_oligo_agent(
     messages: Vec<Message>,
     app_handle: &AppHandle,
     cancel_token: CancellationToken,
-) -> Result<Option<String>, String> {
+) -> Result<Option<(String, Option<Vec<Artifact>>)>, String> {
     let invoke_url = build_oligo_invoke_url(oligo_base_url)
         .map_err(|e| format!("Invalid Oligo gateway URL: {}", e))?;
 
@@ -282,6 +284,7 @@ pub async fn stream_oligo_agent(
         .map_err(|e| format!("Oligo EventSource init failed: {}", e))?;
 
     let mut full_text = String::new();
+    let mut session_artifacts: Vec<Artifact> = Vec::new();
 
     loop {
         tokio::select! {
@@ -322,6 +325,29 @@ pub async fn stream_oligo_agent(
                                 .map_err(|e| format!("emit {} failed: {}", ev, e))?;
                             continue;
                         }
+                        if msg.event == "bb-message-artifacts" {
+                            // FC.2b: forward to webview AND collect for persistence
+                            // alongside the bb ChatEntry. Never enters Message
+                            // (LLM runtime) — only the persisted ChatEntry.
+                            let payload: serde_json::Value = if data.is_empty() {
+                                serde_json::json!({ "artifacts": [] })
+                            } else {
+                                serde_json::from_str(data).unwrap_or_else(|_| {
+                                    serde_json::json!({ "artifacts": [], "raw": data })
+                                })
+                            };
+                            if let Some(arts) = payload.get("artifacts").and_then(|v| v.as_array()) {
+                                for a in arts {
+                                    if let Ok(parsed) = serde_json::from_value::<Artifact>(a.clone()) {
+                                        session_artifacts.push(parsed);
+                                    }
+                                }
+                            }
+                            app_handle
+                                .emit("bb-message-artifacts", payload)
+                                .map_err(|e| format!("emit bb-message-artifacts failed: {}", e))?;
+                            continue;
+                        }
                         if data == "[DONE]" {
                             break;
                         }
@@ -359,7 +385,12 @@ pub async fn stream_oligo_agent(
                     }
                     Err(e) => {
                         if !full_text.is_empty() {
-                            return Ok(Some(full_text));
+                            let arts = if session_artifacts.is_empty() {
+                                None
+                            } else {
+                                Some(std::mem::take(&mut session_artifacts))
+                            };
+                            return Ok(Some((full_text, arts)));
                         }
                         return Err(format!("Oligo SSE stream error: {}", e));
                     }
@@ -372,5 +403,10 @@ pub async fn stream_oligo_agent(
         }
     }
 
-    Ok(Some(full_text))
+    let arts = if session_artifacts.is_empty() {
+        None
+    } else {
+        Some(session_artifacts)
+    };
+    Ok(Some((full_text, arts)))
 }

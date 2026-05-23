@@ -13,6 +13,11 @@
 
   type StageKind = 'router' | 'tool' | 'wash' | 'final';
   type Sender = 'system' | 'user' | 'bb' | 'system_log' | 'error' | 'stage_card';
+  type Artifact = {
+    kind: string;
+    path: string;
+    metadata?: Record<string, unknown> | null;
+  };
   type HistoryEntry = {
     id: string;
     sender: Sender;
@@ -33,6 +38,8 @@
     tool_name?: string;
     decision?: string;
     stage_feedback?: 'good' | 'bad';
+    /** FC.2b: side-channel artifacts for this BB turn (vault notes, etc.). Rendered in FC.3b. */
+    artifacts?: Artifact[];
   };
   type ProviderConfig = {
     id: string;
@@ -115,6 +122,7 @@
     content: string;
     persona?: string | null;
     session_id: string;
+    artifacts?: Artifact[] | null;
   };
   type TimelineNode = {
     session: SessionSummary;
@@ -192,6 +200,7 @@
   let unlistenBBChunk: (() => void) | null = null;
   let unlistenBBSysEvent: (() => void) | null = null;
   let unlistenBBDone: (() => void) | null = null;
+  let unlistenBBArtifacts: (() => void) | null = null;
   let unlistenSublimateRequest: (() => void) | null = null;
   let unlistenLoadSession: (() => void) | null = null;
   let unlistenNewSignal: (() => void) | null = null;
@@ -828,6 +837,7 @@
         text: entry.content,
         timestamp: entry.timestamp || nowIso(),
         persona: entry.persona ?? DEFAULT_PERSONA,
+        artifacts: entry.artifacts ?? undefined,
       }));
       activeSessionId = summary.id;
       viewingArchive = summary;
@@ -1557,6 +1567,16 @@
       queueBBChunk(fragment);
     });
 
+    unlistenBBArtifacts = await listen<{ artifacts?: Artifact[] }>('bb-message-artifacts', async (event) => {
+      const payload = event.payload;
+      const arts = (payload && Array.isArray(payload.artifacts)) ? payload.artifacts : [];
+      if (arts.length === 0 || !currentBBMessageId) return;
+      const targetId = currentBBMessageId;
+      history = history.map((msg) =>
+        msg.id === targetId ? { ...msg, artifacts: arts } : msg
+      );
+    });
+
     unlistenBBSysEvent = await listen<unknown>('bb-sys-event', async (event) => {
       const raw = event.payload;
       if (typeof raw === 'string') {
@@ -1719,6 +1739,10 @@
     if (unlistenBBDone) {
       unlistenBBDone();
       unlistenBBDone = null;
+    }
+    if (unlistenBBArtifacts) {
+      unlistenBBArtifacts();
+      unlistenBBArtifacts = null;
     }
     if (unlistenSublimateRequest) {
       unlistenSublimateRequest();

@@ -63,6 +63,17 @@ fn get_legacy_file_path() -> Result<PathBuf, String> {
     Ok(path)
 }
 
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct Artifact {
+    /// Artifact category, e.g. "vault_note". UI selects icon by kind.
+    pub kind: String,
+    /// Resource locator (vault-relative path or URL).
+    pub path: String,
+    /// Optional free-form metadata (title, snippet, score). Not used by the LLM.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub metadata: Option<serde_json::Value>,
+}
+
 #[derive(Serialize, Deserialize, Clone)]
 pub struct ChatEntry {
     pub id: String,
@@ -73,6 +84,11 @@ pub struct ChatEntry {
     pub session_id: String,
     #[serde(default)]
     pub persona: Option<String>,
+    /// FC.2b: side-channel artifacts produced by tool runs in this turn.
+    /// Only populated for "bb" rows; missing on legacy / user / system rows.
+    /// Never re-injected into LLM payload (FC.2a invariant).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub artifacts: Option<Vec<Artifact>>,
 }
 
 #[derive(Serialize, Deserialize, Clone)]
@@ -90,6 +106,7 @@ struct RawChatEntry {
     content: Option<String>,
     session_id: Option<String>,
     persona: Option<String>,
+    artifacts: Option<Vec<Artifact>>,
 }
 
 fn now_timestamp() -> String {
@@ -147,6 +164,7 @@ fn normalize_raw_entry(raw: RawChatEntry, line_index: usize, session_id: &str) -
         content,
         session_id: session_id.to_string(),
         persona: raw.persona,
+        artifacts: raw.artifacts,
     })
 }
 
@@ -433,4 +451,84 @@ pub fn append_session_entries(session_id: &str, entries: &[ChatEntry]) -> Result
         }
     });
     save_session_entries(session_id, &existing)
+}
+
+#[cfg(test)]
+mod tests {
+    //! FC.2b: ChatEntry/Artifact round-trip via JSONL serde.
+    //!
+    //! These guard the on-disk format: legacy entries (no `artifacts` field)
+    //! must continue to deserialize, and new entries with artifacts must
+    //! round-trip through serde without losing data.
+
+    use super::*;
+
+    fn roundtrip(entry: &ChatEntry) -> ChatEntry {
+        let line = serde_json::to_string(entry).expect("serialize ChatEntry");
+        let raw: RawChatEntry = serde_json::from_str(&line).expect("parse RawChatEntry");
+        normalize_raw_entry(raw, 0, &entry.session_id).expect("normalize")
+    }
+
+    #[test]
+    fn legacy_entry_without_artifacts_field_deserializes() {
+        // pre-FC.2b JSONL line — no "artifacts" key at all.
+        let legacy = r#"{"id":"u1","timestamp":"2026-05-23T10:00:00.000Z","role":"user","content":"hi","session_id":"s","persona":null}"#;
+        let raw: RawChatEntry = serde_json::from_str(legacy).expect("legacy line should parse");
+        let entry = normalize_raw_entry(raw, 0, "s").expect("normalize");
+        assert_eq!(entry.id, "u1");
+        assert_eq!(entry.role, "user");
+        assert!(entry.artifacts.is_none());
+    }
+
+    #[test]
+    fn entry_with_artifacts_roundtrips() {
+        let original = ChatEntry {
+            id: "bb1".to_string(),
+            timestamp: "2026-05-23T10:01:00.000Z".to_string(),
+            role: "bb".to_string(),
+            content: "answer".to_string(),
+            session_id: "s".to_string(),
+            persona: Some("reviewer-zero".to_string()),
+            artifacts: Some(vec![Artifact {
+                kind: "vault_note".to_string(),
+                path: "/vault/Note.md".to_string(),
+                metadata: Some(serde_json::json!({ "title": "Note", "type": "thought" })),
+            }]),
+        };
+        let after = roundtrip(&original);
+        assert_eq!(after.id, "bb1");
+        let arts = after.artifacts.expect("artifacts preserved");
+        assert_eq!(arts.len(), 1);
+        assert_eq!(arts[0].kind, "vault_note");
+        assert_eq!(arts[0].path, "/vault/Note.md");
+        let meta = arts[0].metadata.as_ref().expect("metadata preserved");
+        assert_eq!(meta.get("title").and_then(|v| v.as_str()), Some("Note"));
+    }
+
+    #[test]
+    fn entry_without_artifacts_omits_field_in_serialized_form() {
+        // skip_serializing_if = "Option::is_none" → no "artifacts" key for None.
+        let entry = ChatEntry {
+            id: "u1".to_string(),
+            timestamp: "2026-05-23T10:00:00.000Z".to_string(),
+            role: "user".to_string(),
+            content: "hi".to_string(),
+            session_id: "s".to_string(),
+            persona: None,
+            artifacts: None,
+        };
+        let serialized = serde_json::to_string(&entry).expect("serialize");
+        assert!(!serialized.contains("artifacts"));
+    }
+
+    #[test]
+    fn artifact_optional_metadata_omits_field_when_none() {
+        let art = Artifact {
+            kind: "vault_note".to_string(),
+            path: "/x.md".to_string(),
+            metadata: None,
+        };
+        let serialized = serde_json::to_string(&art).expect("serialize");
+        assert!(!serialized.contains("metadata"));
+    }
 }
