@@ -19,12 +19,14 @@ from typing import Any, AsyncGenerator, Literal
 from collections.abc import Awaitable, Callable
 
 from src.crucible.core.schemas import (
+    Artifact,
     ChatMessage,
     ExecutedToolResult,
     OligoAgentConfig,
     PlannedToolCall,
     PromptStage,
     ToolCallStatus,
+    ToolOutput,
 )
 from src.crucible.ports.llm.base import LLMClient
 from src.crucible.services.metrics_service import MetricsService
@@ -643,12 +645,16 @@ class ChimeraAgent:
         if svc is not None:
             svc.record_wash(original_length, washed_length, tool_name)
 
-    async def _execute_tool(self, tool_name: str, args: dict[str, Any]) -> str:
+    async def _execute_tool(
+        self, tool_name: str, args: dict[str, Any]
+    ) -> tuple[str, list[Artifact] | None]:
         """
         从 ``TOOL_REGISTRY`` 调度工具执行；入参为 planning 阶段已解析的 dict。
 
         Returns:
-            工具执行结果字符串；出错时返回 "Error: ..." 描述。
+            ``(text, artifacts)``。``text`` 是 LLM 面向字符串（与历史 ``str`` 返回等价）；
+            ``artifacts`` 仅当工具返回 ``ToolOutput`` 且其 ``artifacts`` 非空时为 ``list``,
+            否则为 ``None``。错误路径返回 ``("Error: ...", None)``。
         """
         if tool_name not in TOOL_REGISTRY:
             out = f"Error: Tool '{tool_name}' is not recognized by the Chimera OS."
@@ -657,11 +663,16 @@ class ChimeraAgent:
                 tool_name,
                 out[:300],
             )
-            return out
+            return out, None
         fn = TOOL_REGISTRY[tool_name]
+        artifacts: list[Artifact] | None = None
         try:
             result = await fn(**args)
-            out = str(result)
+            if isinstance(result, ToolOutput):
+                out = result.text
+                artifacts = result.artifacts or None
+            else:
+                out = str(result)
         except TypeError as e:
             out = f"Error: Tool '{tool_name}' invalid args: {e}"
         logger.info(
@@ -669,11 +680,11 @@ class ChimeraAgent:
             tool_name,
             out[:300],
         )
-        return out
+        return out, artifacts
 
     async def _execute_tool_with_deadline(
         self, tool_name: str, args: dict[str, Any]
-    ) -> str:
+    ) -> tuple[str, list[Artifact] | None]:
         """调度层死线：不修改 `_execute_tool`，仅包裹 `wait_for`。"""
         deadline = self._agent_config.tool_execution_deadline_seconds
         try:
@@ -688,7 +699,8 @@ class ChimeraAgent:
                 tool_name,
             )
             return (
-                f"[TOOL TIMEOUT]: Execution exceeded {deadline}s and was terminated."
+                f"[TOOL TIMEOUT]: Execution exceeded {deadline}s and was terminated.",
+                None,
             )
 
     @staticmethod
@@ -745,7 +757,7 @@ class ChimeraAgent:
         async def _run_one(plan: PlannedToolCall) -> ExecutedToolResult:
             t0 = time.perf_counter()
             try:
-                raw = await self._execute_tool_with_deadline(
+                raw, artifacts = await self._execute_tool_with_deadline(
                     plan.tool_name, plan.args
                 )
             except asyncio.CancelledError:
@@ -789,6 +801,7 @@ class ChimeraAgent:
                 washed_result=None,
                 error_message=None,
                 elapsed_ms=int(elapsed_ms),
+                artifacts=artifacts,
             )
 
         if len(batch) == 1:

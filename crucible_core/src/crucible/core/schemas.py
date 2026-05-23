@@ -434,6 +434,50 @@ class PlannedToolCall(BaseModel):
     )
 
 
+class Artifact(BaseModel):
+    """A structured pointer to a side-channel resource produced by a tool run.
+
+    Artifacts ride alongside the LLM-facing text but are NEVER folded into the
+    prompt — they exist for the UI / persistence layer (FC.2 / FC.3 chip path).
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    kind: str = Field(
+        ...,
+        description="Artifact category, e.g. 'vault_note', 'web_page'. UI selects icon by kind.",
+    )
+    path: str = Field(
+        ...,
+        description="Resource locator (vault-relative path or URL). FC.3 validates containment for vault_note.",
+    )
+    metadata: dict[str, Any] | None = Field(
+        default=None,
+        description="Optional free-form metadata (title, snippet, score). Not used by the LLM.",
+    )
+
+
+class ToolOutput(BaseModel):
+    """Opt-in structured tool return.
+
+    A tool may return a ``str`` (legacy, unchanged) OR a ``ToolOutput``.
+    ``text`` participates in wash exactly like a legacy ``str`` return, subject
+    to ``OligoAgentConfig.bypass_wash_tools`` / ``force_wash_tools``.
+    ``artifacts`` are carried separately and never enter the LLM-facing render.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    text: str = Field(
+        ...,
+        description="LLM-facing text. Wash policy applies as if this were a legacy str return.",
+    )
+    artifacts: list[Artifact] | None = Field(
+        default=None,
+        description="Optional side-channel pointers; consumed by FC.2 aggregation, never by the LLM.",
+    )
+
+
 class ExecutedToolResult(BaseModel):
     """Immutable record of one tool run: inputs, status, optional raw/wash text, timing."""
 
@@ -461,6 +505,10 @@ class ExecutedToolResult(BaseModel):
     elapsed_ms: int | None = Field(
         default=None,
         description="Wall time for the execute step in milliseconds, if measured.",
+    )
+    artifacts: list[Artifact] | None = Field(
+        default=None,
+        description="Side-channel pointers produced by the tool (FC.1). Never folded into LLM payload.",
     )
 
 

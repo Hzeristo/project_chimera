@@ -5,6 +5,8 @@ from __future__ import annotations
 
 from typing import Any, Protocol
 
+from src.crucible.core.schemas import Artifact, ToolOutput
+
 class _VaultToolPort(Protocol):
     """Structural type for vault search backends (``VaultReadAdapter`` or test doubles)."""
 
@@ -65,7 +67,7 @@ async def read_vault_file(path: str) -> str:
     return f"[File: {p}]\n\n{content}"
 
 
-async def search_vault(query: str, **kwargs: Any) -> str:
+async def search_vault(query: str, **kwargs: Any) -> ToolOutput:
     """
     Search the Obsidian vault for notes whose bodies match the query (keyword-style).
 
@@ -74,21 +76,27 @@ async def search_vault(query: str, **kwargs: Any) -> str:
         top_k: Optional; max hits (default 3), from JSON args.
 
     Returns:
-        Matching note snippets as formatted text from the vault adapter.
+        ``ToolOutput`` whose ``text`` is the adapter's formatted snippets and
+        ``artifacts`` is ``None`` (the adapter exposes no structured row for
+        keyword search; parsing back from the display string is intentionally
+        out of FC.1 scope).
     """
     if _vault_adapter is None:
-        return "[Tool Error] Vault adapter not initialized"
+        return ToolOutput(text="[Tool Error] Vault adapter not initialized")
     try:
         q = str(query or "").strip()
         if not q:
-            return "[Tool Error]: search_vault requires a non-empty query string."
+            return ToolOutput(
+                text="[Tool Error]: search_vault requires a non-empty query string."
+            )
         top_k = int(kwargs.get("top_k", 3))
-        return await _vault_adapter.search_notes(q, top_k)
+        text = await _vault_adapter.search_notes(q, top_k)
     except (TypeError, ValueError) as e:
-        return f"Error: Tool 'search_vault' invalid args: {e}"
+        return ToolOutput(text=f"Error: Tool 'search_vault' invalid args: {e}")
+    return ToolOutput(text=text)
 
 
-async def search_vault_attribute(key: str, value: str, **kwargs: Any) -> str:
+async def search_vault_attribute(key: str, value: str, **kwargs: Any) -> ToolOutput:
     """
     Search the vault by YAML frontmatter (key must exist; value matched as substring).
 
@@ -98,24 +106,55 @@ async def search_vault_attribute(key: str, value: str, **kwargs: Any) -> str:
         top_k: Optional; max hits (default 5), from JSON args.
 
     Returns:
-        Matching note snippets from the vault adapter.
+        ``ToolOutput`` whose ``text`` is the adapter's formatted snippets and
+        ``artifacts`` is ``None`` (same reasoning as ``search_vault``).
     """
     if _vault_adapter is None:
-        return "[Tool Error] Vault adapter not initialized"
+        return ToolOutput(text="[Tool Error] Vault adapter not initialized")
     try:
         attr_key = str(key or "").strip()
         attr_val = str(value or "").strip()
         top_k = int(kwargs.get("top_k", 5))
-        return await _vault_adapter.search_by_attribute(attr_key, attr_val, top_k)
+        text = await _vault_adapter.search_by_attribute(attr_key, attr_val, top_k)
     except (TypeError, ValueError) as e:
-        return f"Error: Tool 'search_vault_attribute' invalid args: {e}"
+        return ToolOutput(
+            text=f"Error: Tool 'search_vault_attribute' invalid args: {e}"
+        )
+    return ToolOutput(text=text)
+
+
+def _artifacts_from_graph_rows(rows: list[dict[str, Any]]) -> list[Artifact] | None:
+    """Project ``query_graph`` rows into ``Artifact``s; ``None`` if no rows have a path."""
+    artifacts: list[Artifact] = []
+    for row in rows:
+        path = row.get("path")
+        if not isinstance(path, str) or not path:
+            continue
+        meta: dict[str, Any] = {}
+        title = row.get("title")
+        if title is not None:
+            meta["title"] = title
+        ntype = row.get("type")
+        if ntype is not None:
+            meta["type"] = ntype
+        links = row.get("links")
+        if links:
+            meta["links"] = list(links)
+        artifacts.append(
+            Artifact(
+                kind="vault_note",
+                path=path,
+                metadata=meta or None,
+            )
+        )
+    return artifacts or None
 
 
 async def obsidian_graph_query(
     node_type: str | None = None,
     link_pattern: str | None = None,
     **kwargs: Any,
-) -> str:
+) -> ToolOutput:
     """
     Query the Obsidian graph for nodes and links (frontmatter type, wikilinks, graph_edges).
 
@@ -125,10 +164,12 @@ async def obsidian_graph_query(
         max_depth: BFS depth from seed matches (default 2), from JSON args.
 
     Returns:
-        Formatted list of nodes (title, type, links); at most 10 shown in full.
+        ``ToolOutput`` whose ``text`` is the byte-identical formatted node list
+        (at most 10 shown in full) and ``artifacts`` is one ``Artifact`` per
+        matched row (``kind="vault_note"``), derived before string-flattening.
     """
     if _vault_adapter is None:
-        return "[Tool Error] Vault adapter not initialized"
+        return ToolOutput(text="[Tool Error] Vault adapter not initialized")
     nt = None if node_type is None else str(node_type).strip() or None
     lp = None if link_pattern is None else str(link_pattern).strip() or None
     try:
@@ -140,7 +181,9 @@ async def obsidian_graph_query(
     try:
         results = await _vault_adapter.query_graph(nt, lp, md)
     except (TypeError, ValueError) as e:
-        return f"Error: Tool 'obsidian_graph_query' invalid args: {e}"
+        return ToolOutput(
+            text=f"Error: Tool 'obsidian_graph_query' invalid args: {e}"
+        )
 
     if not results:
         bits: list[str] = []
@@ -149,7 +192,9 @@ async def obsidian_graph_query(
         if lp:
             bits.append(f"pattern={lp!r}")
         tail = ", ".join(bits) if bits else "no matching notes in vault"
-        return f"[Graph Query] No nodes found ({tail})"
+        return ToolOutput(text=f"[Graph Query] No nodes found ({tail})")
+
+    artifacts = _artifacts_from_graph_rows(results)
 
     out = f"[Graph Query] Found {len(results)} nodes:\n\n"
     for node in results[:10]:
@@ -165,4 +210,4 @@ async def obsidian_graph_query(
             out += f"  Links: {', '.join(preview)}\n"
     if len(results) > 10:
         out += f"\n… and {len(results) - 10} more (showing first 10).\n"
-    return out
+    return ToolOutput(text=out, artifacts=artifacts)

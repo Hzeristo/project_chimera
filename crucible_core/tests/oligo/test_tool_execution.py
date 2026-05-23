@@ -421,3 +421,122 @@ def test_render_tool_results_ir2_error_args_invalid(mock_client):
     )
     text = agent._render_tool_results_for_llm([er])
     assert 'reason="ARGS_INVALID"' in text
+
+
+# ---------------------------------------------------------------------------
+# FC.1: ToolOutput / Artifact opt-in for vault tools
+# ---------------------------------------------------------------------------
+
+
+async def test_tooloutput_obsidian_graph_query_yields_artifacts(mock_client):
+    """obsidian_graph_query returns ToolOutput with artifacts derived from rows."""
+    from src.crucible.core.schemas import Artifact, ToolOutput
+    from src.oligo.tools.vault_tools import obsidian_graph_query
+
+    set_vault_adapter(_MockVaultAdapter())
+    try:
+        result = await obsidian_graph_query(node_type="thought")
+    finally:
+        set_vault_adapter(None)
+
+    assert isinstance(result, ToolOutput)
+    assert "Mock" in result.text
+    assert result.artifacts is not None
+    assert len(result.artifacts) == 1
+    art = result.artifacts[0]
+    assert isinstance(art, Artifact)
+    assert art.kind == "vault_note"
+    assert art.path == "/dev/null/Mock.md"
+    assert art.metadata is not None
+    assert art.metadata.get("title") == "Mock"
+    assert art.metadata.get("type") == "thought"
+
+
+async def test_tooloutput_search_vault_artifacts_none(mock_client):
+    """search_vault returns ToolOutput but artifacts is None (no structured tier)."""
+    from src.crucible.core.schemas import ToolOutput
+    from src.oligo.tools.vault_tools import search_vault
+
+    set_vault_adapter(_MockVaultAdapter())
+    try:
+        result = await search_vault("RAG")
+    finally:
+        set_vault_adapter(None)
+
+    assert isinstance(result, ToolOutput)
+    assert "RAG" in result.text
+    assert result.artifacts is None
+
+
+async def test_tooloutput_artifacts_never_in_llm_render(mock_client):
+    """ExecutedToolResult.artifacts must not leak into _render_tool_results_for_llm."""
+    from src.crucible.core.schemas import Artifact, ExecutedToolResult, ToolCallStatus
+
+    agent = ChimeraAgent(
+        raw_messages=[{"role": "user", "content": "graph?"}],
+        system_core="x",
+        skill_override=None,
+        llm_client=mock_client(),
+    )
+    secret_path = "/should/never/leak/Secret.md"
+    er = ExecutedToolResult(
+        call_id="c-fc1",
+        tool_name="obsidian_graph_query",
+        args={"node_type": "thought"},
+        status=ToolCallStatus.SUCCESS,
+        raw_result="[Graph Query] Found 1 nodes:\n\n- Mock (thought)\n",
+        artifacts=[
+            Artifact(
+                kind="vault_note",
+                path=secret_path,
+                metadata={"title": "Secret"},
+            )
+        ],
+    )
+    text = agent._render_tool_results_for_llm([er])
+    assert secret_path not in text
+    assert "Secret" not in text
+    assert "[Graph Query] Found 1 nodes" in text
+
+
+async def test_tooloutput_executed_tool_result_carries_artifacts(mock_client):
+    """End-to-end: obsidian_graph_query through _execute_tool_calls populates artifacts."""
+    from src.oligo.tools.vault_tools import set_vault_adapter
+
+    set_vault_adapter(_MockVaultAdapter())
+    try:
+        agent = ChimeraAgent(
+            raw_messages=[{"role": "user", "content": "graph"}],
+            system_core="x",
+            skill_override=None,
+            llm_client=mock_client(),
+            allowed_tools=None,
+        )
+        planned = [
+            PlannedToolCall(
+                id="call-fc1-graph",
+                tool_name="obsidian_graph_query",
+                raw_args='{"node_type": "thought"}',
+                args={"node_type": "thought"},
+                allowed=True,
+            ),
+            PlannedToolCall(
+                id="call-fc1-search",
+                tool_name="search_vault",
+                raw_args='{"query": "RAG"}',
+                args={"query": "RAG"},
+                allowed=True,
+            ),
+        ]
+        results = await agent._execute_tool_calls(planned)
+    finally:
+        set_vault_adapter(None)
+
+    by_id = {r.call_id: r for r in results}
+    graph_er = by_id["call-fc1-graph"]
+    search_er = by_id["call-fc1-search"]
+    assert graph_er.status == ToolCallStatus.SUCCESS
+    assert graph_er.artifacts is not None
+    assert graph_er.artifacts[0].path == "/dev/null/Mock.md"
+    assert search_er.status == ToolCallStatus.SUCCESS
+    assert search_er.artifacts is None

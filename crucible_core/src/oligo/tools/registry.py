@@ -5,7 +5,7 @@ from __future__ import annotations
 
 from collections.abc import Awaitable, Callable, Collection
 
-from src.crucible.core.schemas import PlannedToolCall, ToolSpec
+from src.crucible.core.schemas import PlannedToolCall, ToolOutput, ToolSpec
 from src.oligo.tools.miner_tools import (
     arxiv_miner,
     check_task_status,
@@ -19,7 +19,7 @@ from src.oligo.tools.vault_tools import (
 )
 from src.oligo.tools.web_search import web_search
 
-ToolFn = Callable[..., Awaitable[str]]
+ToolFn = Callable[..., Awaitable[str | ToolOutput]]
 
 
 class ToolRegistry:
