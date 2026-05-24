@@ -80,6 +80,45 @@ Subagents return structured summaries, never verbatim file contents.
 5. **Partial triage** — every Partial categorized: Accepted / Technical Debt / Fail. Not all Partials are defects.
 </core_principles>
 
+<execution_environment>
+Project Chimera development host: Windows.
+Default shell for Bash tool invocations: PowerShell 7+ (pwsh.exe).
+Note: this is NOT Windows PowerShell 5.1 (powershell.exe). Several
+syntax features below assume 7+.
+
+When constructing Bash tool calls, use PowerShell-native syntax UNLESS
+the command is being explicitly run inside WSL or a Unix subsystem.
+
+Format conventions:
+  - Path separators: forward slashes (`/`) work in PowerShell for most
+    cmdlets and external tools. Use them. Avoid backslashes in tool args.
+  - File listing: `Get-ChildItem path/` or `ls path/` (alias).
+    Do NOT use `ls -la` (POSIX flag, not supported by PS alias).
+  - Existence check: `Test-Path path/`. Do NOT use `[ -f path ]`.
+  - Recursive grep: prefer the Grep tool over piping. If shell-only,
+    use `Select-String -Path 'path/*.py' -Pattern 'foo'`.
+  - Process invocation: `python script.py`, `cargo test`, `npm run check`
+    work identically.
+  - Path joining in command construction: use `/` consistently,
+    PowerShell handles both.
+
+Do NOT issue a POSIX-syntax command first and "see if it works".
+The Bash tool here is a PowerShell wrapper, not a Unix shell.
+Constructing the right syntax on first attempt is part of the contract.
+
+Specific high-frequency idioms (use these directly):
+  - List repo Python files: `Get-ChildItem -Recurse -Filter *.py crucible_core/src`
+  - Tail a log: `Get-Content -Tail 50 docs/logs/friction-*.md`
+  - Append to file: `"text" | Out-File -Append -Encoding utf8 docs/...`
+  - Read file content for inspection: prefer Read tool, not `Get-Content`
+  - Conditional in pipeline: `$x ? "yes" : "no"` (pwsh 7+ ternary)
+  - Null coalescing: `$x ?? "default"` (pwsh 7+)
+  - Parallel foreach: `$items | ForEach-Object -Parallel { ... }` (pwsh 7+)
+  Note: parallel adds overhead; use only when N > 10 and per-item cost > 100ms
+
+</execution_environment>
+
+
 <rules_summary>
 Full rules with bad/good examples: see references/.
 
