@@ -1114,6 +1114,78 @@ async fn delete_chat_message(
     Ok(())
 }
 
+/// Validates that `raw` resolves to a path canonically inside `vault_root`.
+/// Rejects traversal components (`..`) before touching the filesystem and
+/// symlink escapes via canonical-path prefix check after resolving symlinks.
+fn vault_contains_path(
+    vault_root: &std::path::Path,
+    raw: &str,
+) -> Result<std::path::PathBuf, String> {
+    use std::path::{Component, Path};
+
+    let candidate = Path::new(raw);
+    if candidate.components().any(|c| c == Component::ParentDir) {
+        return Err(format!("[vault_contains_path] traversal rejected: {}", raw));
+    }
+
+    let joined = if candidate.is_absolute() {
+        candidate.to_path_buf()
+    } else {
+        vault_root.join(candidate)
+    };
+
+    let canon_root = std::fs::canonicalize(vault_root)
+        .map_err(|e| format!("[vault_contains_path] vault_root canonicalize failed: {}", e))?;
+    let canon_candidate = std::fs::canonicalize(&joined)
+        .map_err(|e| format!("[vault_contains_path] candidate canonicalize failed: {}", e))?;
+
+    if !canon_candidate.starts_with(&canon_root) {
+        return Err(format!("[vault_contains_path] path outside vault root: {}", raw));
+    }
+
+    Ok(canon_candidate)
+}
+
+/// Opens a vault note in Obsidian after validating the path is inside vault root.
+#[tauri::command]
+async fn open_vault_note(
+    path: String,
+    state: tauri::State<'_, AstrocyteState>,
+    app: tauri::AppHandle,
+) -> Result<(), String> {
+    use tauri_plugin_opener::OpenerExt;
+
+    let vault_root_str = state
+        .chimera
+        .read()
+        .expect("chimera lock poisoned")
+        .system
+        .vault_root
+        .clone()
+        .ok_or_else(|| {
+            "[open_vault_note] vault_root not configured in ~/.chimera/config.toml".to_string()
+        })?;
+
+    let raw = path.trim();
+    vault_contains_path(std::path::Path::new(&vault_root_str), raw)?;
+
+    let mut encoded = String::with_capacity(raw.len() + 16);
+    for b in raw.bytes() {
+        match b {
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9'
+            | b'-' | b'_' | b'.' | b'~' | b'/' | b':' => encoded.push(b as char),
+            _ => encoded.push_str(&format!("%{:02X}", b)),
+        }
+    }
+    let uri = format!("obsidian://open?path={}", encoded);
+
+    info!("[open_vault_note] opening {}", raw);
+    app.opener()
+        .open_url(&uri, None::<&str>)
+        .map_err(|e| format!("[open_vault_note] opener failed: {}", e))?;
+
+    Ok(())
+}
 
 #[tauri::command]
 async fn load_session_archive(
@@ -1532,8 +1604,75 @@ pub fn run() {
             hide_timeline,
             load_session_into_main,
             new_signal_in_main,
-            sublimate_scratchpad
+            sublimate_scratchpad,
+            open_vault_note
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
+}
+
+#[cfg(test)]
+mod path_containment_tests {
+    use super::vault_contains_path;
+    use std::fs;
+
+    fn make_temp_vault() -> tempfile::TempDir {
+        let dir = tempfile::tempdir().expect("tempdir");
+        fs::write(dir.path().join("note.md"), "# test").expect("write note");
+        dir
+    }
+
+    #[test]
+    fn inside_root_accepted() {
+        let vault = make_temp_vault();
+        let result = vault_contains_path(vault.path(), "note.md");
+        assert!(result.is_ok(), "expected Ok, got {:?}", result);
+    }
+
+    #[test]
+    fn outside_root_rejected() {
+        let vault = make_temp_vault();
+        // Absolute path to a sibling directory that exists (system temp root)
+        let outside = std::env::temp_dir();
+        let result = vault_contains_path(vault.path(), outside.to_str().unwrap());
+        assert!(result.is_err(), "expected Err for outside-root path");
+    }
+
+    #[test]
+    fn traversal_rejected() {
+        let vault = make_temp_vault();
+        let result = vault_contains_path(vault.path(), "../escape.md");
+        assert!(result.is_err(), "expected Err for traversal path");
+    }
+
+    #[test]
+    fn nested_traversal_rejected() {
+        let vault = make_temp_vault();
+        let result = vault_contains_path(vault.path(), "subdir/../../escape.md");
+        assert!(result.is_err(), "expected Err for nested traversal");
+    }
+
+    #[test]
+    #[cfg(not(target_os = "windows"))]
+    fn symlink_escape_rejected() {
+        use std::os::unix::fs::symlink;
+        let vault = make_temp_vault();
+        let outside = tempfile::tempdir().expect("outside tempdir");
+        fs::write(outside.path().join("secret.md"), "secret").expect("write secret");
+        let link = vault.path().join("link.md");
+        symlink(outside.path().join("secret.md"), &link).expect("symlink");
+        let result = vault_contains_path(vault.path(), "link.md");
+        assert!(result.is_err(), "expected Err for symlink escaping vault");
+    }
+
+    // Windows symlink creation requires Developer Mode or admin rights.
+    // The containment helper's canonicalize() call enforces the same
+    // invariant on Windows; this test documents the skip reason.
+    #[test]
+    #[cfg(target_os = "windows")]
+    fn symlink_escape_skipped_on_windows_without_devmode() {
+        // Symlink creation on Windows requires elevated privileges.
+        // canonicalize() in vault_contains_path still resolves symlinks
+        // when they exist, so the guard holds at runtime.
+    }
 }
