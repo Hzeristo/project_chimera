@@ -8,6 +8,10 @@ allowed-tools:
   - TodoWrite
   - Task
   - Bash(git log:*, git diff:*, git status:*, git show:*, cat docs/*:*)
+  # NEW: append-only writes to state files (phase_review mode only)
+  - Edit  # required for status field flips
+  - Bash(echo * >> docs/ACCEPTED_PARTIALS.md:*)
+  - Bash(echo * >> docs/TECHNICAL_DEBT.md:*)
 ---
 
 <skill_identity>
@@ -57,6 +61,30 @@ Do NOT auto-switch (skill cannot invoke /model). Only inform.
 | "review phase {X}", "seal phase {X}", "终审" | phase_review | references/phase-review-process.md | assets/phase-review-verdict-template.md |
 
 </invocation_modes>
+
+<state_write_authority>
+This skill has restricted write authority over state files in phase_review mode only:
+
+AUTO-APPLY (no user approval required):
+- Append to docs/ACCEPTED_PARTIALS.md
+- Append to docs/TECHNICAL_DEBT.md
+- Flip friction status SCHEDULED → RESOLVED for current phase frictions
+- Delete docs/phases/{phase}/_progress.md after seal
+
+PROPOSE-DIFF (user approval required):
+- docs/ROADMAP.md
+- friction-*.md status changes outside phase-resolution
+- Any conflicting modifications to existing entries
+
+NEVER WRITE in any mode:
+- CLAUDE.md
+- Skill files themselves
+- Source code (handed to chimera-code-taste)
+- Architecture docs (chimera-code-taste only, in sprint scope)
+
+This authority exists ONLY in phase_review mode. phase_audit and
+batch_planning modes remain read-only as before.
+</state_write_authority>
 
 <subagent_routing>
 Spawn subagents (Task tool, general-purpose, model: Haiku) for:

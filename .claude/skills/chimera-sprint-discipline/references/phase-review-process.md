@@ -114,13 +114,29 @@ Sealing decision:
 </step>
 
 <step n="8">
-Output proposed diffs for state files:
-- `docs/ROADMAP.md`: phase status update (Active → Sealed / Functionally Sealed)
-- `docs/ACCEPTED_PARTIALS.md`: new entries to append
-- `docs/TECHNICAL_DEBT.md`: new DEBT-{id} entries to append
-- `docs/logs/friction-*.md`: status updates for resolved frictions
+Apply state file updates by category:
 
-Output as unified diff blocks. Do NOT apply directly. User reviews and applies.
+**Auto-apply (mechanical, no decision):**
+- ACCEPTED_PARTIALS.md: append new partials with full context
+- TECHNICAL_DEBT.md: append new DEBT-{id} entries
+- friction-*.md: flip status SCHEDULED → RESOLVED for entries this phase resolved
+- Phase-progress _progress.md: delete after seal (per step N+1)
+
+**Propose diff for user approval (decision-bearing):**
+- ROADMAP.md phase status (Active → Sealed / Functionally Sealed)
+- friction-*.md status changes that aren't direct phase-resolutions
+  (e.g., reclassify OPEN → WONTFIX based on new evidence)
+- Any state file change that conflicts with existing content
+
+For auto-apply category:
+1. Use Edit / Bash echo>> per the file's append-only or mutate semantics
+2. Verify by Read after write — confirm entry visible
+3. Stage but DO NOT commit (user owns commit message for state changes)
+
+For propose-diff category:
+- Output unified diff
+- Wait for user approval
+- Only then apply via Edit
 </step>
 
 <step n="N+1">
