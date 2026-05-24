@@ -1408,6 +1408,15 @@
     isGenerating = false;
   }
 
+  async function openVaultNote(path: string) {
+    try {
+      await invoke('open_vault_note', { path });
+    } catch (error) {
+      const errText = typeof error === 'string' ? error : 'open_vault_note failed';
+      notifySystem(`[OPEN_VAULT_NOTE_ERROR] ${errText}`);
+    }
+  }
+
   async function dispatchEvaluate(message: string, appendUser: boolean) {
     if (isGenerating) return;
     const normalized = message.trim();
@@ -2014,6 +2023,21 @@
             <div class="msg-content" data-sender={msg.sender} data-loading={msg.isLoading ? 'true' : undefined}>
               {@html renderMarkdown(msg)}
             </div>
+            {#if msg.sender === 'bb' && msg.artifacts && msg.artifacts.length > 0}
+              <div class="artifact-chips" aria-label="vault artifacts">
+                {#each msg.artifacts as art (art.path)}
+                  <button
+                    type="button"
+                    class="artifact-chip"
+                    title="Open in Obsidian: {art.path}"
+                    on:click={() => openVaultNote(art.path)}
+                  >
+                    <span class="artifact-chip__icon" aria-hidden="true">◈</span>
+                    <span class="artifact-chip__label">{art.path.split('/').pop() ?? art.path}</span>
+                  </button>
+                {/each}
+              </div>
+            {/if}
             {#if msg.sender === 'bb' && !msg.isLoading && msg.feedback === undefined}
               <div class="feedback-buttons">
                 <button
@@ -2792,6 +2816,51 @@
     font-size: 11px;
     letter-spacing: 0.04em;
     color: var(--astrocyte-purple-a-75);
+  }
+
+  .artifact-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-2);
+    margin-top: var(--space-2);
+  }
+
+  .artifact-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-1);
+    padding: 2px var(--space-2);
+    border: 1px solid var(--astrocyte-purple-a-30);
+    border-radius: 3px;
+    background: var(--surface-chrome-92);
+    color: var(--astrocyte-neural-purple);
+    font: inherit;
+    font-size: 11px;
+    letter-spacing: 0.02em;
+    cursor: pointer;
+    transition: border-color 120ms ease, background 120ms ease;
+  }
+
+  .artifact-chip:hover {
+    border-color: var(--astrocyte-purple-a-72);
+    background: var(--astrocyte-purple-a-10);
+  }
+
+  .artifact-chip:focus-visible {
+    outline: 1px solid var(--astrocyte-neural-purple);
+    outline-offset: 2px;
+  }
+
+  .artifact-chip__icon {
+    font-size: 10px;
+    opacity: 0.7;
+  }
+
+  .artifact-chip__label {
+    max-width: 220px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   .hud-input-wrap {
