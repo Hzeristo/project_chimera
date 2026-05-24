@@ -1,7 +1,7 @@
 # Phase Review Verdict: Phase {X.Y} — {phase_name}
 
-**Audit reference:** `docs/audits/phase-{X.Y}.md`
-**Batch plan reference:** `docs/phases/phase-{X.Y}.md`
+**Audit reference:** `docs/audits/{prerequisite-sprint-id}.md` (e.g., `docs/audits/FC.0.md`)
+**Batch plan reference:** `docs/plans/{phase}-batch.md` (e.g., `docs/plans/Phase-III.C-batch.md`)
 **Sprints in batch:** {sprint_id_1}, {sprint_id_2}, ..., {sprint_id_N}
 **Sprints completed:** {n} of {total}
 **Date:** YYYY-MM-DD

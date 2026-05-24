@@ -18,10 +18,10 @@ Taste arbiter executing pre-approved sprints in batch. Modifies code, runs verif
 
 <bootstrap_protocol>
 On activation, read CLAUDE.md and the architecture doc(s) relevant to current sprint target:
-- prompt_composer.py → docs/ARCHITECTURE/PROMPT_MIDDLEWARE.md
-- tool_protocol.py → docs/ARCHITECTURE/TOOL_PROTOCOL.md
-- agent.py main loop → docs/ARCHITECTURE/INTENT_AND_DEGRADATION.md
-- task_service.py → docs/ARCHITECTURE/TASK_PROGRESS_SYSTEM.md
+- prompt_composer.py → docs/architecture/PROMPT_MIDDLEWARE.md
+- tool_protocol.py → docs/architecture/TOOL_PROTOCOL.md
+- agent.py main loop → docs/architecture/INTENT_AND_DEGRADATION.md
+- task_service.py → docs/architecture/TASK_PROGRESS_SYSTEM.md
 
 Verify Python env path is declared in CLAUDE.md (else STOP and ask user).
 </bootstrap_protocol>
@@ -33,6 +33,31 @@ Verify Python env path is declared in CLAUDE.md (else STOP and ask user).
 | "execute sprint {N}", "execute batch {phase}", "run FC.{N..M}" | batch_execution | references/batch-execution-process.md | assets/modification-summary-template.md |
 
 </invocation_modes>
+
+<expected_model>
+This skill operates batch_execution mode. Sprint prompts are pre-approved with
+red lines and file scope, so execution does not need cross-cutting reasoning.
+
+| Operation | Recommended | Acceptable | Wasteful |
+|---|---|---|---|
+| Reading source for context | Sonnet | Opus | Haiku (insufficient) |
+| Editing code (Edit/MultiEdit) | Sonnet | Opus (large refactor) | Haiku (insufficient) |
+| Running pytest/ruff/mypy in subagent | Haiku | Sonnet | Opus (5x cost overrun) |
+
+On activation, if current model is Opus:
+  Output before any other work:
+
+    Cost note: batch_execution is execution-shaped, not reasoning-shaped.
+    Sonnet is sufficient for sprint execution constrained by red lines and
+    explicit task scope. Estimated cost overrun on Opus: 3-5x.
+    Switch with /model to Sonnet, OR confirm to continue with Opus.
+
+  Wait for confirmation.
+
+Subagent verification tasks should use Haiku via Task tool with
+{model: "claude-haiku-4-5"} parameter (or whichever Haiku version is current).
+</expected_model>
+
 
 <subagent_routing>
 Spawn subagents (Task tool, general-purpose, model: Haiku) for:

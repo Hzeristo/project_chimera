@@ -1,6 +1,7 @@
 # Phase Audit: Phase {X.Y} — {phase_name}
 
 **Scope:** Read-only audit prerequisite for batch_planning of Phase {X.Y}.
+**Output location:** `docs/audits/{prerequisite-sprint-id}.md` (e.g., `docs/audits/FC.0.md` — named for the sprint that authors it).
 **Date:** YYYY-MM-DD
 **Mode:** Read-only — no fix proposals, no code modifications.
 

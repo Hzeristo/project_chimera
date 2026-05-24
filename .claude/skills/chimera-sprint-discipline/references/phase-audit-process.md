@@ -7,7 +7,7 @@ when every claim is anchored.
 </key_insight>
 
 ## Hard Preconditions
-1. Phase doc exists at docs/phases/phase-{X}.md
+1. Phase doc exists at docs/phases/phase-{X.Y}.md (lowercase `phase-`)
 2. Phase doc has Mission + Driving frictions + Sprint name list
 3. Phase doc does NOT have detailed per-sprint task lists (those are batch_planning's job)
 
@@ -36,11 +36,16 @@ Flag, do not propose fixes.
 </step>
 
 <step n="6">
-Output using assets/phase-audit-template.md. Write to docs/audits/phase-{X}.md.
+Output using assets/phase-audit-template.md. Write to docs/audits/{prerequisite-sprint-id}.md
+(e.g., `docs/audits/FC.0.md` when the phase's first read-only sprint is FC.0).
+
+The audit is named for the sprint that authors it, typically the phase's first
+read-only sprint. There is no separate phase-level audit artifact — the prerequisite
+sprint IS the audit.
 </step>
 
 ## Success Criteria
 - [ ] Every Q has file:line answer
 - [ ] Cross-findings flagged separately from Q answers
 - [ ] No fix proposals
-- [ ] Output committed to docs/audits/phase-{X}.md
+- [ ] Output committed to docs/audits/{prerequisite-sprint-id}.md

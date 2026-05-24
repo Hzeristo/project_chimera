@@ -8,9 +8,9 @@ The mitigation: sprint dependencies explicit, predecessor assumptions named.
 </key_insight>
 
 ## Hard Preconditions
-1. Phase audit complete at docs/audits/phase-{X}.md
+1. Phase audit complete at docs/audits/{prerequisite-sprint-id}.md (e.g., `docs/audits/FC.0.md`)
 2. Phase doc declares sprint name list (sparse manifest)
-3. ROADMAP.md + FRICTION_LOG.md confirm phase is current active
+3. ROADMAP.md + docs/logs/friction-*.md confirm phase is current active
 
 ## Steps
 
@@ -40,7 +40,12 @@ Mark these and reduce their scope accordingly.
 
 <step n="5">
 Output sprint sequence using assets/batch-plan-template.md.
+Write to `docs/plans/{phase}-batch.md` (e.g., `docs/plans/Phase-III.C-batch.md`).
 The sequence is a single document — user approves whole or rejects whole.
+
+Note: the batch plan is a distinct artifact from the phase doc.
+- Phase doc (`docs/phases/phase-{X.Y}.md`): sparse manifest, sprint names + one-line goals.
+- Batch plan (`docs/plans/{phase}-batch.md`): detailed task scope, file lists, red lines.
 </step>
 
 ## Success Criteria

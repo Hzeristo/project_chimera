@@ -1,7 +1,8 @@
 # Batch Plan: Phase {X.Y} — {phase_name}
 
-**Audit reference:** `docs/audits/phase-{X.Y}.md` (date: YYYY-MM-DD)
-**Phase doc:** `docs/phases/phase-{X.Y}.md`
+**Output location:** `docs/plans/{phase}-batch.md` (e.g., `docs/plans/Phase-III.C-batch.md`).
+**Audit reference:** `docs/audits/{prerequisite-sprint-id}.md` (e.g., `docs/audits/FC.0.md`) (date: YYYY-MM-DD)
+**Phase doc:** `docs/phases/phase-{X.Y}.md` (sparse manifest — distinct from this batch plan)
 **Driving frictions:** {friction_id_1}, {friction_id_2}
 
 This document is a single unit. User approves the whole sequence or rejects
@@ -97,7 +98,7 @@ These MUST Pass at phase_review for sealing:
 User approves whole sequence or rejects whole sequence.
 
 Upon approval, hand off to `chimera-code-taste` with:
-> "Execute batch for Phase {X.Y} per `docs/phases/phase-{X.Y}.md`."
+> "Execute batch for Phase {X.Y} per `docs/plans/{phase}-batch.md`."
 
 ---
 

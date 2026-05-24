@@ -11,8 +11,8 @@ A halted batch with documented Accepted Partials may still be a successful revie
 
 ## Hard Preconditions
 
-1. Phase audit exists at `docs/audits/phase-{X}.md`
-2. Batch plan exists at `docs/phases/phase-{X}.md` (includes sprint sequence)
+1. Phase audit exists at `docs/audits/{prerequisite-sprint-id}.md` (e.g., `docs/audits/FC.0.md`)
+2. Batch plan exists at `docs/plans/{phase}-batch.md` (e.g., `docs/plans/Phase-III.C-batch.md`)
 3. Batch execution has completed (or halted) — at least one sprint commit exists
 4. User explicitly invoked review (not auto-triggered after batch_execution)
 
@@ -51,8 +51,8 @@ Read phase audit to recover original questions and cross-findings.
 Read batch plan to recover declared red lines and acceptance criteria per sprint.
 
 ```
-Read("docs/audits/phase-{X}.md")
-Read("docs/phases/phase-{X}.md")
+Read("docs/audits/{prerequisite-sprint-id}.md")
+Read("docs/plans/{phase}-batch.md")
 ```
 </step>
 
@@ -63,7 +63,7 @@ Spawn subagent (Haiku) for repo-wide red-line scans:
 ```
 Task(
   subagent_type="general-purpose",
-  prompt="Grep for forbidden patterns across src/: 'except BaseException', 'TOOL_REGISTRY[', any other red lines from phase-{X}.md. Return file:line of any matches."
+  prompt="Grep for forbidden patterns across src/: 'except BaseException', 'TOOL_REGISTRY[', any other red lines from phase-{X.Y}.md. Return file:line of any matches."
 )
 ```
 </step>
@@ -86,7 +86,7 @@ Triage decision tree:
 </step>
 
 <step n="5">
-Verify hard sealing conditions from `docs/phases/phase-{X}.md`. These are the
+Verify hard sealing conditions from `docs/phases/phase-{X.Y}.md`. These are the
 phase-level acceptance criteria, distinct from per-sprint criteria.
 
 For each sealing condition: explicit Pass/Fail with file:line or test output.
@@ -96,7 +96,7 @@ For each sealing condition: explicit Pass/Fail with file:line or test output.
 Verify each driving friction from phase doc has been addressed:
 
 ```
-Read("docs/FRICTION_LOG.md")  # OR docs/logs/friction-*.md
+Glob("docs/logs/friction-*.md")
 ```
 
 For each friction listed in phase doc:
@@ -118,7 +118,7 @@ Output proposed diffs for state files:
 - `docs/ROADMAP.md`: phase status update (Active → Sealed / Functionally Sealed)
 - `docs/ACCEPTED_PARTIALS.md`: new entries to append
 - `docs/TECHNICAL_DEBT.md`: new DEBT-{id} entries to append
-- `docs/FRICTION_LOG.md` or `docs/logs/friction-*.md`: status updates for resolved frictions
+- `docs/logs/friction-*.md`: status updates for resolved frictions
 
 Output as unified diff blocks. Do NOT apply directly. User reviews and applies.
 </step>
@@ -160,6 +160,7 @@ Hard Sealing:
 Frictions:
 | friction-260506 E3 → SCHEDULED → RESOLVED | docs/logs/friction-260506.md:42 |
 | friction-260506 E4 → SCHEDULED → RESOLVED | docs/logs/friction-260506.md:67 |
+
 
 ✅ Sealed. 4 Pass, 1 Accepted Partial, 1 Technical Debt filed.
 </good>

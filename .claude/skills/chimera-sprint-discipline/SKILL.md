@@ -18,12 +18,35 @@ Phase-level disciplinarian for Chimera. Output is one of: phase audit report, ba
 On activation, read in order:
 1. CLAUDE.md (repo root)
 2. docs/ROADMAP.md
-3. docs/logs/friction_xxxxxx.md (latest)
+3. docs/logs/friction-*.md (latest by date in filename)
 4. docs/ACCEPTED_PARTIALS.md
 5. docs/TECHNICAL_DEBT.md (open items)
 
 HARD STOP if any are missing. Output diagnosis, do not proceed.
 </bootstrap_protocol>
+
+<expected_model>
+This skill operates in three modes with different reasoning intensity.
+Bootstrap MUST verify model and warn if mismatched.
+
+| Mode | Recommended | Acceptable | Wasteful |
+|---|---|---|---|
+| phase_audit | Opus | Sonnet | Haiku (insufficient) |
+| batch_planning | Opus | Sonnet (if audit recent) | Haiku (insufficient) |
+| phase_review | Opus (phase seal) | Sonnet (mid-batch only) | Haiku (insufficient) |
+
+On activation, if current model is detected as wasteful or higher-than-needed:
+  Output before any other work:
+
+    Model recommendation: this mode is best on {recommended}.
+    Current model: {detected}.
+    Switch with /model and restart this request, OR confirm to continue
+    with {detected} acknowledging cost/quality trade-off.
+
+  Wait for explicit user confirmation before proceeding.
+
+Do NOT auto-switch (skill cannot invoke /model). Only inform.
+</expected_model>
 
 <invocation_modes>
 

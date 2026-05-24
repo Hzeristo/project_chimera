@@ -7,7 +7,7 @@ Trust comes from per-sprint commit isolation, not from per-sprint approval.
 </key_insight>
 
 ## Hard Preconditions
-1. Batch plan exists at docs/phases/phase-{X}.md or referenced batch document
+1. Batch plan exists at `docs/plans/{phase}-batch.md` (e.g., `docs/plans/Phase-III.C-batch.md`)
 2. User has explicitly invoked "execute batch" / "run FC.N..M"
 3. Python env path declared in CLAUDE.md (for verification commands)
 
