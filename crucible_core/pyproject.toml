@@ -1,0 +1,68 @@
+[build-system]
+requires = ["hatchling>=1.21"]
+build-backend = "hatchling.build"
+
+[project]
+name = "chimera"
+version = "0.1.0"
+description = "Project Chimera — personal research OS"
+requires-python = ">=3.11"
+authors = [{ name = "Architect" }]
+readme = "README.md"
+
+dependencies = [
+    # Stable core
+    "PyYAML>=6,<7",
+    "tomlkit>=0.12,<1",                                                                                                                                                                              
+    "python-dotenv>=1,<2",
+    "Jinja2>=3.1,<4",
+    "tenacity>=8.2,<10",
+    "requests>=2.31,<3",
+
+    # Pydantic v2 era — lockstep
+    "pydantic>=2.5,<3",
+    "pydantic-settings>=2.1,<3",
+
+    # OpenAI v1 + httpx (transport coupling — see docs/audits/python-deps.md §4.3)
+    "openai>=1.40,<2",
+    "httpx>=0.27,<0.29",
+
+    # FastAPI — pydantic-v2-era required
+    "fastapi>=0.110,<1",
+]
+
+[project.optional-dependencies]
+dev = [
+    "ruff>=0.6",
+    "mypy>=1.10",
+    "pytest>=8",
+    "pytest-asyncio>=0.23",
+]
+
+# uvicorn deferred — runtime serving currently launched out-of-tree.
+# Add here when in-tree ASGI entrypoint is introduced.
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/crucible", "src/oligo"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP"]
+ignore = ["E501"]  # line length handled by formatter
+
+[tool.mypy]
+python_version = "3.11"
+strict = false
+warn_return_any = true
+warn_unused_ignores = true
+explicit_package_bases = true
+mypy_path = "src"
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+pythonpath = ["src"]

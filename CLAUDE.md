@@ -26,13 +26,12 @@ See `docs/ARCHITECTURE/`.
 ## Development environment
 
 ### Python (crucible_core)
-- Path: `<TBD — populate after debt-week cleanup>`
-- Version: `<TBD>`
-- Package manager: `<TBD>`
-- Lockfile: `<TBD>`
-
-**Until populated**: Claude must ask user before running pytest/ruff/mypy.
-After populated: Claude prefixes all tool calls with the declared path.
+- Path: `crucible_core/.venv/Scripts/python.exe`
+- Version: 3.11+
+- Package manager: uv
+- Manifest: `crucible_core/pyproject.toml`
+- Lockfiles: `crucible_core/requirements.txt`, `crucible_core/requirements-dev.txt`
+- Activation prefix for tool calls: `Bash("./crucible_core/.venv/Scripts/python -m {tool}")`
 
 ### Rust (astrocyte)
 - Standard cargo workspace, no special config
