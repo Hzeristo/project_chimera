@@ -74,4 +74,4 @@ Each entry: phase / sprint, partial description, reason for acceptance.
 
 ---
 
-*Update protocol: Append-only at sprint seal. New entries proposed by `chimera-sprint-discipline` review process; user applies the diff.*
+*Update protocol: Append-only at sprint seal. New entries appended by `chimera-sprint-discipline` phase_review mode under `<state_write_authority>` (auto-apply, no diff).*

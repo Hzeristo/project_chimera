@@ -21,7 +21,6 @@ Items found during review or use that are NOT accepted partials. These are defic
 | DEBT-009 | FC.2a smoke work (May 2026) | FC.2a smoke test stalled: mock never transitions to PASS, exhausting `max_turns`. Roots: (a) `conftest.MockLLMClient` lacks PASS-switch logic (b) workaround only exists in `agent.py` `__main__`; testing via `__main__` is an antipattern (c) `test_run_theater_with_tool_calls_executes_and_streams` may hide the mock gap | Medium | Unify mock harness; add PASS-switch (or equivalent) on `MockLLMClient`; debt week remove `__main__`-oriented test code from agent |
 | DEBT-010 | env entropy | Python deps unmanaged; conda paper env polluted; no lockfile | P1 — schedule debt week post Phase III.C seal | 1. Audit imports → docs/audits/python-deps.md\n2. Author pyproject.toml + uv.lock\n3. Update CLAUDE.md\n4. Archive conda paper env (don't delete) |
 | DEBT-011 | skill-memory alignment audit (2026-05-24) | Pre-existing friction entries (friction-260426, friction-260506) use legacy field labels (`想做的事`/`我想做的事情`, `实际怎么做的`/`我实际怎么做的`, `摩擦成本`) instead of canonical (`想做`/`实际`/`成本`); tolerated under D9 documented variance, not retroactively rewritten | Very Low | Touch-and-repair: when a future session edits a legacy entry, opportunistically migrate field labels |
-| DEBT-012 | skill-memory alignment audit (2026-05-24) | Append-only contract for ACCEPTED_PARTIALS.md and TECHNICAL_DEBT.md is documented only in the file footers (`ACCEPTED_PARTIALS.md:77`, `TECHNICAL_DEBT.md:64`); no skill process doc cites the constraint, so a skill writing directly could violate it | Low | Add explicit "do NOT write to ACCEPTED_PARTIALS.md or TECHNICAL_DEBT.md directly; propose unified diff only" to chimera-sprint-discipline phase-review-process.md and any other process doc that touches these files |
 
 
 ---
@@ -39,6 +38,7 @@ Items found during review or use that are NOT accepted partials. These are defic
 | DEBT-pre-007 | Phase III.A Step 0 | `{commit}` | LLM hallucinated tool names not in `TOOL_REGISTRY` |
 | DEBT-pre-008 | Phase III.B.1 | `{commit}` | Persona / skill_override / system_core hand-concatenated across 5+ sites |
 | DEBT-pre-009 | Phase III.B.2 | `{commit}` | Argument JSON parsing failed on smart quotes, code fences, trailing commas |
+| DEBT-012 | `6974cd8` | Append-only contract for ACCEPTED_PARTIALS.md and TECHNICAL_DEBT.md was undocumented in skill process docs. Resolved opposite-direction: phase_review mode now has explicit auto-apply authority for both files via `<state_write_authority>` block in `chimera-sprint-discipline/SKILL.md` and `references/phase-review-process.md` step 8; no separate prohibition needed because the granted scope itself is the contract |
 
 ---
 
@@ -63,4 +63,4 @@ When backlog accumulates:
 
 ---
 
-*Update protocol: New entries via `chimera-sprint-discipline` review process. Resolved entries moved by author at fix-commit time.*
+*Update protocol: New entries appended by `chimera-sprint-discipline` phase_review mode under `<state_write_authority>` (auto-apply, no diff). Resolved entries moved by author at fix-commit time.*

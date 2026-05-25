@@ -9,7 +9,7 @@
 - 成本: Phase III.C 推迟 1+ 小时
 - 理想: chimera-recovery skill;migration 后自动 import-resolution scan
 
-### Entry 2 [Status: SCHEDULED]
+### Entry 2 [Status: RESOLVED]
 - 时间: 2026.05.18
 - 想做: 在干净环境下跑 R.1 验证
 - 实际: 仍在用 PaperMiner 时代遗留的 conda 环境,臃肿且混杂
@@ -19,4 +19,5 @@
   (c) ruff/mypy 之前根本没在这个项目跑过——R.1 是第一次发现
 - 成本: 隐性技术债 + 跨项目工具污染风险
 - 理想: skill 明确声明环境路径 + 工具入口;debt week 清理 conda env
+- 解决: `db6bc54` 建立 uv-managed `.venv` + `pyproject.toml`;CLAUDE.md "Development environment" 块声明路径
 
