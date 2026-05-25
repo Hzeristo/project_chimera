@@ -155,3 +155,55 @@ def test_compose_retrieval_context_demo_when_active() -> None:
     assert "<source>demo</source>" in blob
     assert "<title>Example</title>" in blob
     ET.fromstring(blob)  # well-formed
+
+
+def test_router_persona_invariance() -> None:
+    """Router compose output is byte-identical regardless of persona value.
+
+    Out of scope: direct-mode (Rust) persona injection in lib.rs:706-735 — that path
+    bypasses PromptComposer entirely and is not covered here.
+    """
+    ctx_base = {
+        "tool_list": "- search_vault: search notes",
+        "skill_override": "",
+        "persona": "",
+        "authors_note": "",
+    }
+    ctx_with_persona = {**ctx_base, "persona": "You are a dramatic waifu assistant."}
+
+    c1 = PromptComposer()
+    c2 = PromptComposer()
+    # Register identical ROUTER components on both; only persona context differs.
+    for c in (c1, c2):
+        c.register(_make("router_intro", PromptStage.ROUTER, 100, True, "Intro text"))
+        c.register(_make("router_tools", PromptStage.ROUTER, 90, True, "Tools: {tool_list}"))
+
+    stable1, dynamic1 = c1.compose(PromptStage.ROUTER, ctx_base)
+    stable2, dynamic2 = c2.compose(PromptStage.ROUTER, ctx_with_persona)
+
+    assert stable1 == stable2, "Router stable section must not vary with persona"
+    assert dynamic1 == dynamic2, "Router dynamic section must not vary with persona"
+
+
+def test_router_drops_persona_component_with_warning(caplog: pytest.LogCaptureFixture) -> None:
+    """A {persona}-bearing component registered for ROUTER stage is dropped with a warning."""
+    import logging
+
+    c = PromptComposer()
+    c.register(_make("safe_router", PromptStage.ROUTER, 100, True, "Safe content"))
+    c.register(
+        _make("leaky_persona", PromptStage.ROUTER, 50, True, "Hello {persona}, welcome")
+    )
+
+    with caplog.at_level(logging.WARNING, logger="src.oligo.core.prompt_composer"):
+        stable, dynamic = c.compose(
+            PromptStage.ROUTER,
+            {"persona": "waifu", "tool_list": "", "skill_override": "", "authors_note": ""},
+        )
+
+    result = f"{stable}\n{dynamic}"
+    assert "Safe content" in result, "Non-persona component must survive"
+    assert "waifu" not in result, "Persona value must not appear in Router output"
+    assert any(
+        "leaky_persona" in r.message for r in caplog.records
+    ), "Warning must name the dropped component id"
