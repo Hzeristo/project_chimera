@@ -74,4 +74,28 @@ Each entry: phase / sprint, partial description, reason for acceptance.
 
 ---
 
+## Phase III.C — Structured Final Contract (sealed 2026-05-25)
+
+### FC.1.1 — `search_vault` / `search_vault_attribute` return `artifacts=None`
+- **Description:** Both tools return `ToolOutput(text=..., artifacts=None)`. No structured artifact tier exists in the adapter; parsing back from the display string would brittle-couple the tool to formatter changes.
+- **Reason:** `obsidian_graph_query` does populate artifacts from the adapter's `list[dict]`. The two search tools are intentionally deferred until the adapter exposes a structured tier.
+
+### FC.2b.1 — `state::Message` not widened with `artifacts`
+- **Description:** The runtime LLM history struct (`state::Message`) does not carry an `artifacts` field. Only `ChatEntry` (persistence) carries it.
+- **Reason:** Adding `artifacts` to `Message` would risk leakage into outbound `evaluate_payload` (HSC #2 violation). `ChatEntry.artifacts` persists; UI reads via SSE event + `load_session_archive` return.
+
+### FC.3b.1 — `svelte-check` deferred
+- **Description:** `svelte-check` not run at FC.3b commit time. `node_modules` absent on dev host.
+- **Reason:** Same condition as FC.2b. No TypeScript errors expected: `invoke` already imported; `msg.artifacts` typed as `Artifact[]`.
+
+### FC.5.1 — E2E manual smoke deferred to FC.6
+- **Description:** FC.5 verify-only sprint confirmed the delete pipeline structurally. Full E2E (delete → restart → confirm gone) deferred to FC.6 smoke procedure.
+- **Reason:** FC.5 is verify-only by definition; E2E requires a running app. Smoke procedure documented at `docs/audits/FC.6-e2e-smoke.md`.
+
+### FC.6.1 — E2E manual smoke not automated
+- **Description:** `docs/audits/FC.6-e2e-smoke.md` is a manual checklist, not an automated script.
+- **Reason:** No E2E harness exists in the project. Introducing one violates `chimera-dependency-veto`. Manual procedure is sufficient for a single-user personal OS.
+
+---
+
 *Update protocol: Append-only at sprint seal. New entries appended by `chimera-sprint-discipline` phase_review mode under `<state_write_authority>` (auto-apply, no diff).*

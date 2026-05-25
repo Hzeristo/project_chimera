@@ -68,3 +68,17 @@ Primary objective: identify defects, risks, edge cases, regressions, and missin
 - 成本：5分钟。半杯咖啡
 - 理想：能从astrocyte开始调用所有的miner工具和脚本。
 
+### entry 6 [Status: RESOLVED — Phase III.C]
+- 时间: 2026-05-25
+- 想做: 追溯 BB 回答中引用的 vault 文件（E3 friction resolution）
+- 实际: Phase III.C FC.1–FC.3b 实现了 ToolOutput/Artifact 结构化输出、bb-message-artifacts SSE 事件、Svelte artifact chip 渲染、open_vault_note Tauri 命令。点击 chip 直接在 Obsidian 打开对应笔记。
+- 解决: FC.1 (`4a4cf0c`) + FC.2a (`094f28d`) + FC.2b (`dcb9807`) + FC.3a (`4261a84`) + FC.3b (`b7582bf`)
+- 参考: `docs/ARCHITECTURE/FINAL_CONTRACT.md` §1–3, §5–6
+
+### entry 7 [Status: RESOLVED — Phase III.C]
+- 时间: 2026-05-25
+- 想做: 删除 BB 消息（E4 friction resolution）
+- 实际: Phase III.C FC.5 verify-only sprint 确认 delete pipeline 完整：delete_chat_message Tauri 命令、memory.rs delete_entry、前端 deleteMessage + onAiAction 全部到位，删除后重启持久化。
+- 解决: delete pipeline 已在 Phase III.B 期间实现；FC.5 (`d75dec1`) 正式核查并记录
+- 参考: `docs/audits/FC.5-verify.md`, `docs/ARCHITECTURE/FINAL_CONTRACT.md` §7
+

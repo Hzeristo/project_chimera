@@ -2,8 +2,8 @@
 
 Personal research OS for one user. Not a framework. Not SaaS.
 
-> **Last sealed:** Phase III.B.3 (functional seal) — 2026-05-XX
-> **Active:** Phase III.C — Structured Final Contract (planning complete, FC.0 audit ready)
+> **Last sealed:** Phase III.C — Structured Final Contract — 2026-05-25
+> **Active:** Phase IV (TBD)
 
 ---
 
@@ -73,7 +73,7 @@ Personal research OS for one user. Not a framework. Not SaaS.
 
 # Phase III.C — Structured Final Contract
 
-**Status:** Active
+**Status:** Sealed — 2026-05-25
 **Sealed predecessor:** III.B.3
 **Driving frictions:** E3 (tool results unlinkable), E4 (cannot delete messages)
 
