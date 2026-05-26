@@ -9,7 +9,7 @@ allowed-tools:
   - MultiEdit
   - Write
   - Task
-  - Bash(pytest:*, ruff:*, mypy:*, git diff:*, git show:*, git status:*, ./scripts/check_taste.sh:*)
+  - PowerShell(pytest:*, ruff:*, mypy:*, git diff:*, git show:*, git status:*, ./scripts/check_taste.ps1:*)
 ---
 
 <skill_identity>
@@ -60,7 +60,7 @@ Subagent verification tasks should use Haiku via Task tool with
 
 <subagent_routing>
 Spawn subagents (Task tool, general-purpose, model: Haiku) for:
-- Running check_taste.sh and parsing output
+- Running check_taste.ps1 and parsing output
 - Running pytest suite and summarizing failures
 - Cross-file rule violation scanning
 
@@ -83,39 +83,35 @@ Subagents return only: pass/fail, failure summaries, file:line of violations.
 
 <execution_environment>
 Project Chimera development host: Windows.
-Default shell for Bash tool invocations: PowerShell 7+ (pwsh.exe).
-Note: this is NOT Windows PowerShell 5.1 (powershell.exe). Several
-syntax features below assume 7+.
+Tool invocations use the PowerShell tool (pwsh 7+), NOT Bash.
 
-When constructing Bash tool calls, use PowerShell-native syntax UNLESS
-the command is being explicitly run inside WSL or a Unix subsystem.
+PowerShell-native idioms to use:
+  - File listing: Get-ChildItem path/ -Recurse -Filter *.py
+  - Existence check: Test-Path path/
+  - Pattern search: Select-String -Path 'path/*.py' -Pattern 'foo' -Recurse
+  - File content: Get-Content path/file.md
+  - Append to file: "text" | Out-File -Append -Encoding utf8 path/file.md
+  - Remove file: Remove-Item path/file.md -Force
+  - Conditional: $x ? "yes" : "no" (pwsh 7+ ternary)
+  - Null coalescing: $x ?? "default" (pwsh 7+)
 
-Format conventions:
-  - Path separators: forward slashes (`/`) work in PowerShell for most
-    cmdlets and external tools. Use them. Avoid backslashes in tool args.
-  - File listing: `Get-ChildItem path/` or `ls path/` (alias).
-    Do NOT use `ls -la` (POSIX flag, not supported by PS alias).
-  - Existence check: `Test-Path path/`. Do NOT use `[ -f path ]`.
-  - Recursive grep: prefer the Grep tool over piping. If shell-only,
-    use `Select-String -Path 'path/*.py' -Pattern 'foo'`.
-  - Process invocation: `python script.py`, `cargo test`, `npm run check`
-    work identically.
-  - Path joining in command construction: use `/` consistently,
-    PowerShell handles both.
+Cross-platform commands that work as-is:
+  - git log/diff/status/show/add/commit
+  - python -m pytest/ruff/mypy
+  - cargo test/build
+  - npm run check / pnpm check
 
-Do NOT issue a POSIX-syntax command first and "see if it works".
-The Bash tool here is a PowerShell wrapper, not a Unix shell.
-Constructing the right syntax on first attempt is part of the contract.
+Do NOT use Unix-only syntax:
+  - find (use Get-ChildItem -Recurse)
+  - grep (use Select-String)
+  - rm (use Remove-Item)
+  - cat (use Get-Content — alias exists but not in tool globs)
+  - test -f (use Test-Path)
+  - echo "x" >> file (use Out-File -Append)
+  - [ -d path ] (use Test-Path -PathType Container)
+  - wc -l (use (Get-Content file).Count)
 
-Specific high-frequency idioms (use these directly):
-  - List repo Python files: `Get-ChildItem -Recurse -Filter *.py crucible_core/src`
-  - Tail a log: `Get-Content -Tail 50 docs/logs/friction-*.md`
-  - Append to file: `"text" | Out-File -Append -Encoding utf8 docs/...`
-  - Read file content for inspection: prefer Read tool, not `Get-Content`
-  - Conditional in pipeline: `$x ? "yes" : "no"` (pwsh 7+ ternary)
-  - Null coalescing: `$x ?? "default"` (pwsh 7+)
-  - Parallel foreach: `$items | ForEach-Object -Parallel { ... }` (pwsh 7+)
-  Note: parallel adds overhead; use only when N > 10 and per-item cost > 100ms
+Construct correct syntax on first attempt. No POSIX-then-retry pattern.
 </execution_environment>
 
 
@@ -125,7 +121,7 @@ Full rules with bad/good examples: references/taste-rules.md, references/anti-pa
 **Quick do:**
 - Read files in full before editing
 - Grep call sites before renaming
-- Run check_taste.sh after changes
+- Run check_taste.ps1 after changes
 - Bracket-prefix every log
 - Re-raise CancelledError + CLIENT_GONE_EXCEPTIONS
 - Use var(--token) in CSS

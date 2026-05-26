@@ -24,7 +24,7 @@
 
 | Red Line | Status | Verification |
 |---|---|---|
-| {red_line_1} | Held | `Bash("grep ...")` returned 0 hits |
+| {red_line_1} | Held | `PowerShell("Select-String ...")` returned 0 hits |
 | {red_line_2} | Held | `pytest tests/test_x.py` passes |
 | {red_line_3} | **Violated** | `{file}:{line}` shows {what} |
 

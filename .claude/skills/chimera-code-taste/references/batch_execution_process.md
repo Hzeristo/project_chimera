@@ -40,7 +40,7 @@ Apply edits via Edit/MultiEdit. Never reconstruct via Write.
 </step>
 
 <step n="4">
-Spawn subagent (Haiku) to run check_taste.sh + pytest. Receive structured summary.
+Spawn subagent (Haiku) to run check_taste.ps1 + pytest. Receive structured summary.
 </step>
 
 <step n="5">

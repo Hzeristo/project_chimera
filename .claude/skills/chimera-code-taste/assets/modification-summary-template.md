@@ -23,7 +23,7 @@
 | ruff | {clean / N findings} | {file:line if findings} |
 | mypy | {clean / N findings} | {file:line if findings} |
 | pytest ({test_files}) | {n_passed}/{n_total} | {failure_summary if any} |
-| check_taste.sh | {clean / N flags} | {summary if findings} |
+| check_taste.ps1 | {clean / N flags} | {summary if findings} |
 
 ---
 

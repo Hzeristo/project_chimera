@@ -1,12 +1,26 @@
 {
   "permissions": {
     "allow": [
-      "Bash(python -c \"from tests.oligo.conftest import MockLLMClient; c = MockLLMClient\\(probe_response='<CMD:search_vault>', final_response='done'\\); print\\('ok'\\)\")",
-      "Bash(python -c \"import sys; print\\(sys.executable\\)\")",
+      "PowerShell(python -c \"from tests.oligo.conftest import MockLLMClient; c = MockLLMClient\\(probe_response='<CMD:search_vault>', final_response='done'\\); print\\('ok'\\)\")",
+      "PowerShell(python -c \"import sys; print\\(sys.executable\\)\")",
       "Skill(chimera-core-philosophy)",
       "Skill(chimera-sprint-discipline)",
       "Skill(chimera-code-taste)",
-      "Bash(conda run *)"
+      "PowerShell(conda run *)",
+      "PowerShell(git add *)",
+      "PowerShell(git commit -m 'feat\\(crucible\\): FC.1 — ToolOutput + vault tools opt-in *)",
+      "PowerShell(git commit -m 'docs\\(III.C\\): per-sprint records for FC.1 and FC.2a *)",
+      "PowerShell(Get-Content *)",
+      "PowerShell(cargo test *)",
+      "PowerShell(Test-Path *)",
+      "PowerShell(git commit -m ' *)",
+      "PowerShell(git commit *)",
+      "PowerShell(./.venv/Scripts/python -m pytest tests/oligo/test_prompt_composer.py -k persona -q)",
+      "PowerShell(git ls-tree *)",
+      "PowerShell(findstr /I \"final_contract architecture\")",
+      "PowerShell(Select-String -Pattern \"FINAL_CONTRACT|ARCHITECTURE\")",
+      "PowerShell(Get-ChildItem *)",
+      "PowerShell(Remove-Item D:/MAS/project_chimera/docs/phases/phase-III.C/_progress.md -Force)"
     ]
   }
 }

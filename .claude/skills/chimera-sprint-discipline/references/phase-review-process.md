@@ -34,8 +34,8 @@ across the batch. Extract:
 Identify scope: all sprints in the phase batch, completed or not.
 
 ```
-Bash("git log --oneline -50 | grep -i 'phase-{X}'")
-Bash("git log {first_sprint_commit}..HEAD --stat")
+PowerShell("git log --oneline -50 | Select-String -Pattern 'phase-{X}' -CaseSensitive:$false")
+PowerShell("git log {first_sprint_commit}..HEAD --stat")
 ```
 
 For halted batch: identify which sprints completed vs which never ran.
@@ -129,7 +129,7 @@ Apply state file updates by category:
 - Any state file change that conflicts with existing content
 
 For auto-apply category:
-1. Use Edit / Bash echo>> per the file's append-only or mutate semantics
+1. Use Edit / PowerShell Out-File -Append per the file's append-only or mutate semantics
 2. Verify by Read after write — confirm entry visible
 3. Stage but DO NOT commit (user owns commit message for state changes)
 
@@ -165,12 +165,12 @@ No friction status verification. No diff proposed — direct write.)
 | FC.4 | Pass | test_router_persona_invariance passes at test_prompt_composer.py:340 | - |
 
 Red Lines:
-| OpenAI structured-output API not added | Held | grep "response_format" → 0 hits in src/ |
-| artifacts in messages | Held | grep "artifacts" in agent.py message-build paths → 0 hits |
+| OpenAI structured-output API not added | Held | Select-String "response_format" → 0 hits in src/ |
+| artifacts in messages | Held | Select-String "artifacts" in agent.py message-build paths → 0 hits |
 
 Hard Sealing:
 | 3 vault tools return ToolOutput | Pass | vault_tools.py:78,108,141 |
-| artifacts NEVER in messages | Pass | grep verified |
+| artifacts NEVER in messages | Pass | Select-String verified |
 | Router persona-invariant | Pass | test passes |
 
 Frictions:
@@ -184,7 +184,7 @@ Frictions:
 ## Success Criteria
 - [ ] Every sprint in batch has explicit verdict + evidence
 - [ ] Every Partial categorized with reason
-- [ ] Every red line verified via Grep/Bash
+- [ ] Every red line verified via Grep/PowerShell
 - [ ] Hard sealing conditions checked individually
 - [ ] Driving frictions status verified
 - [ ] Sealing decision unambiguous (Sealed / Functionally Sealed / NOT Sealed)
