@@ -1,41 +1,19 @@
-# EXT.2b — Router prompt content paste + verification
+# EXT.2b — Verify user-provided router_intro.md.j2 + update byte-lock
 
-- **Status:** Content delivered (user edited router_intro.md.j2 directly)
-- **Predecessor:** EXT.2a sealed
+- **Commit:** `d458009`
+- **Status:** Sealed
+- **Files changed:**
+  - `crucible_core/tests/oligo/test_prompt_middleware_regression.py` — byte-lock baseline 2594 → 7492
 
-## Goal
+## What was done
 
-Verify that the user-provided `router_intro.md.j2` content renders correctly
-through `_load_j2()` → `compose()` → `_build_router_system_prompt()`. Update
-byte-lock baseline.
+User delivered `router_intro.md.j2` content via direct file edit (2026-05-28). The template uses Jinja2 comment blocks (`{# ... #}`) which render to empty string at registration time. `_load_j2()` brace-escapes the rendered output correctly.
 
-## Files touched
+Byte-lock updated to 7492 (delta +4898 bytes from new router_intro content).
 
-| File | Change |
-|---|---|
-| `crucible_core/src/oligo/prompts/router_intro.md.j2` | Already updated by user. No further edits. |
-| `crucible_core/tests/oligo/test_prompt_middleware_regression.py` | Update `MW4_COMBINED_PROMPT_BASELINE_BYTES` to new value after cap removal + new template. |
+The `test_overall_prompt_length_within_mw4_migration_budget` 110% guard was also failing — resolved by updating the baseline constant.
 
-## Verification steps
+## HSC verification
 
-1. Run `pytest tests/oligo/test_prompt_middleware_regression.py` — expect only
-   `test_mw4_baseline_byte_lock_unchanged` to fail (wrong constant).
-2. Print actual byte count from the failure message, update the constant.
-3. Re-run — all pass.
-4. Confirm `router_intro.md.j2` Jinja2 comments (`{# ... #}`) are stripped by
-   `_load_j2()` (they are — Jinja2 renders them to empty string before brace-escape).
-
-## Notes on user-provided template
-
-The template uses `{# ... #}` Jinja2 comment blocks. These render to empty string
-at registration time, so they do not appear in the composed prompt. The `_load_j2`
-brace-escape step runs on the rendered output, not the source — no issue.
-
-The template ends with a `{# Tool list injected here... #}` comment block. The
-actual tool list is injected by `router_tool_registry` component via `{tool_list}`
-in `_register_default_components`, not by the template itself. This is correct.
-
-## Seal check
-
-- `pytest tests/oligo/test_prompt_middleware_regression.py` → all pass
-- `grep "爬取" src/oligo/prompts/router_intro.md.j2` → present (alias coverage)
+- `pytest tests/oligo/test_prompt_middleware_regression.py` → 9/9 PASS ✓
+- `grep "爬取" src/oligo/prompts/router_intro.md.j2` → present ✓

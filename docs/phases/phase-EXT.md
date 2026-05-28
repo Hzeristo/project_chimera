@@ -17,10 +17,10 @@
 |---|---|---|
 | EXT.0 | Audit: 当前 prompt 内联常量清单 +PromptComposer 渲染链路 | Sealed |
 | EXT.1 | 外部化: 所有 inline prompt → .md/.md.j2 文件, 行为不变 | Sealed `10a282a` |
-| EXT.2a | 移除 4000-char cap + budget-shrink loop | Pending |
-| EXT.2b | 验证用户提供的 router_intro.md.j2 渲染正确; 更新 byte-lock | Content delivered |
-| EXT.2c | 新增 router_continuation.md.j2 + theater loop 按 turn 切换 system prompt | Pending |
-| EXT.2d | probe_response 解析前剥离 `<thinking>` 标签 | Pending |
+| EXT.2a | 移除 4000-char cap + budget-shrink loop | Sealed `d458009` |
+| EXT.2b | 验证用户提供的 router_intro.md.j2 渲染正确; 更新 byte-lock | Sealed `d458009` |
+| EXT.2c | 新增 router_continuation.md.j2 + theater loop 按 turn 切换 system prompt | Sealed `b757ced` |
+| EXT.2d | probe_response 解析前剥离 `<thinking>` 标签 | Sealed `b757ced` |
 | EXT.3 | 工具描述 rich化: ToolSpec 加 user_aliases / examples / common_mistakes | Pending |
 | EXT.4 | Agentic theater讨论(架构决策, 不写代码) | Pending |
 

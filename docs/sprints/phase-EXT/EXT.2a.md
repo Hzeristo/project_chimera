@@ -1,49 +1,18 @@
-# EXT.2a — Structural scaffolding: remove cap + budget-shrink loop
+# EXT.2a — Remove 4000-char cap + budget-shrink loop
 
-- **Status:** Pending
-- **Predecessor:** EXT.1 sealed
+- **Commit:** `d458009`
+- **Status:** Sealed
+- **Files changed:**
+  - `crucible_core/src/oligo/core/agent.py` — removed `_ROUTER_SYSTEM_PROMPT_MAX_CHARS = 4000` constant and budget-shrink loop; `_build_router_system_prompt()` now single `compose()` call at `None` budget
+  - `crucible_core/tests/oligo/test_prompt_middleware_regression.py` — removed `test_ir1_router_system_message_within_char_cap` (cap gone)
 
-## Goal
+## What was done
 
-Remove `_ROUTER_SYSTEM_PROMPT_MAX_CHARS = 4000` and the budget-shrink loop from
-`_build_router_system_prompt()`. Replace with a single `composer.compose()` call
-at `None` budget. Update the `test_ir1_router_system_message_within_char_cap` test
-which asserts `<= 4000`.
+Removed the `_ROUTER_SYSTEM_PROMPT_MAX_CHARS = 4000` constant (IR.1 era, DEBT-005) and the 6-budget shrink loop in `_build_router_system_prompt()`. The loop was introduced to prevent context overflow when the router prompt was ~600 tokens; with the new 5500+ token router prompt, the loop is obsolete and the cap would truncate the prompt.
 
-## Files touched
+`_build_router_system_prompt()` is now a single `compose()` call with `tool_list_max_chars=None`.
 
-| File | Change |
-|---|---|
-| `crucible_core/src/oligo/core/agent.py` | Remove `_ROUTER_SYSTEM_PROMPT_MAX_CHARS` constant (`line 74`). Rewrite `_build_router_system_prompt()` (`lines 488–519`) to single compose call. |
-| `crucible_core/tests/oligo/test_prompt_middleware_regression.py` | Remove or update `test_ir1_router_system_message_within_char_cap` (asserts `<= 4000`; cap is gone). |
+## HSC verification
 
-## Implementation
-
-`_build_router_system_prompt()` becomes:
-
-```python
-def _build_router_system_prompt(self) -> str:
-    composer = get_prompt_composer()
-    active_ids = self._compute_active_router_components()
-    context = self._prompt_context()
-    stable, dynamic = composer.compose(
-        stage=PromptStage.ROUTER,
-        context=context,
-        active_ids=active_ids,
-    )
-    body = f"{stable}\n\n{dynamic}".strip()
-    logger.debug("[Prompt] router compose stable_len=%s dynamic_len=%s", len(stable), len(dynamic))
-    return body
-```
-
-The `__init__` call site (`router_body = self._build_router_system_prompt()`) is unchanged.
-
-## Red lines
-
-- Do NOT touch `compose()` core logic.
-- Do NOT modify the theater loop.
-
-## Seal check
-
-- `grep "_ROUTER_SYSTEM_PROMPT_MAX_CHARS\|budgets.*3200" agent.py` → 0 hits
-- `pytest tests/oligo/test_prompt_middleware_regression.py` → all pass
+- `grep "_ROUTER_SYSTEM_PROMPT_MAX_CHARS\|budgets.*3200" src/oligo/core/agent.py` → 0 hits ✓
+- `pytest tests/oligo/test_prompt_middleware_regression.py` → 9/9 PASS ✓
