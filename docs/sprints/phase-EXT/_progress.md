@@ -8,5 +8,5 @@
 | EXT.2b | Sealed | `d458009` | Verify user-provided router_intro.md.j2; byte-lock 2594→7492 |
 | EXT.2c | Sealed | `b757ced` | router_continuation.md.j2 + theater loop turn-based swap |
 | EXT.2d | Sealed | `b757ced` | Strip `<thinking>` tags from probe_response before parsing |
-| EXT.3 | Pending | — | Rich ToolSpec: user_aliases + common_mistakes fields + verbose render |
+| EXT.3 | Sealed | `a79fa0f` | Rich ToolSpec: user_aliases + common_mistakes; 4 priority tools |
 | EXT.4 | Pending | — | Architecture discussion only; no code |

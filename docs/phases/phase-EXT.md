@@ -21,7 +21,7 @@
 | EXT.2b | 验证用户提供的 router_intro.md.j2 渲染正确; 更新 byte-lock | Sealed `d458009` |
 | EXT.2c | 新增 router_continuation.md.j2 + theater loop 按 turn 切换 system prompt | Sealed `b757ced` |
 | EXT.2d | probe_response 解析前剥离 `<thinking>` 标签 | Sealed `b757ced` |
-| EXT.3 | 工具描述 rich化: ToolSpec 加 user_aliases / examples / common_mistakes | Pending |
+| EXT.3 | 工具描述 rich化: ToolSpec 加 user_aliases / examples / common_mistakes | Sealed `a79fa0f` |
 | EXT.4 | Agentic theater讨论(架构决策, 不写代码) | Pending |
 
 Dependencies: EXT.0 precedes all. EXT.1 precedes EXT.2a–2d.
