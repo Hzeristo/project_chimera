@@ -501,6 +501,9 @@ class ChimeraAgent:
         )
         return body
 
+    def _build_router_continuation_prompt(self) -> str:
+        return _load_md("router_continuation.md.j2")
+
     def _apply_history_sanitizer_to_messages(self) -> None:
         """位点 C：在送往 LLM 前清洗 ``self.messages`` 历史（层 3）。"""
         self.messages = TextSanitizer.sanitize_messages_history(self.messages)  # type: ignore[assignment]
@@ -1107,6 +1110,12 @@ class ChimeraAgent:
             turn += 1
             logger.debug(f"[Oligo] Theater turn {turn}/{self.max_turns}")
 
+            if turn > 1:
+                self.messages[0] = ChatMessage(
+                    role="system",
+                    content=self._build_router_continuation_prompt(),
+                )
+
             # ---------- 步骤 A: 闭门思考（非流式！）----------
             logger.info(
                 "[Router] probe_begin turn=%s/%s", turn, self.max_turns
@@ -1139,6 +1148,7 @@ class ChimeraAgent:
 
             # ---------- 步骤 B: 检查结果 ----------
             logger.info("[Router] Full response (probe): %s", probe_response)
+            probe_response = TextSanitizer.strip_reasoning_tags(probe_response)
             planned_calls = self._parse_tool_calls(probe_response)
             logger.info(
                 "[Router] probe_end tool_calls=%s", len(planned_calls)
