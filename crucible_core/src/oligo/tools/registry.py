@@ -120,6 +120,8 @@ def _register_default_tools(reg: ToolRegistry) -> None:
             },
             concurrency_safe=True,
             long_running=False,
+            user_aliases=["搜索", "查找", "find notes", "vault search", "搜笔记", "找笔记"],
+            examples=['search_vault({"query": "MemoryR1"})'],
         ),
     )
     reg.register(
@@ -234,6 +236,8 @@ def _register_default_tools(reg: ToolRegistry) -> None:
             },
             concurrency_safe=False,
             long_running=True,
+            user_aliases=["爬取", "mine arxiv", "fetch arxiv", "搜索论文", "找论文", "arxiv搜索"],
+            examples=['arxiv_miner({"query": "memory augmented LLM agents"})'],
         ),
     )
     reg.register(
@@ -263,6 +267,14 @@ def _register_default_tools(reg: ToolRegistry) -> None:
             },
             concurrency_safe=False,
             long_running=True,
+            user_aliases=[
+                "爬取papers", "爬取论文", "fetch papers", "run pipeline",
+                "daily pipeline", "跑一下日报", "早上的论文", "今天的论文",
+            ],
+            common_mistakes=[
+                "Do not call this if a pipeline is already running — check task status first.",
+            ],
+            examples=['daily_paper_pipeline({})'],
         ),
     )
     reg.register(
@@ -281,6 +293,11 @@ def _register_default_tools(reg: ToolRegistry) -> None:
             },
             concurrency_safe=True,
             long_running=False,
+            user_aliases=["任务状态", "check status", "pipeline status", "is it done", "跑完了吗"],
+            common_mistakes=[
+                "Do not call this before starting a long-running tool — there will be no task_id yet.",
+            ],
+            examples=['check_task_status({"task_id": "abc123"})'],
         ),
     )
 

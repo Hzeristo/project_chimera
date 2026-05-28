@@ -641,6 +641,14 @@ class ToolSpec(BaseModel):
         default_factory=list,
         description="可选: 1-2 个调用示例, 用于强化 router 的 in-context learning",
     )
+    user_aliases: list[str] = Field(
+        default_factory=list,
+        description="用户可能使用的别名/中文表达, 用于 router intent matching",
+    )
+    common_mistakes: list[str] = Field(
+        default_factory=list,
+        description="常见误用提示, 仅在 verbose 渲染中展示",
+    )
 
     model_config = ConfigDict(extra="forbid")
 

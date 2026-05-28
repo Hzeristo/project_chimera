@@ -107,6 +107,11 @@ def _format_one_tool_verbose(spec: ToolSpec) -> str:
         f"Example (XML): <tool_call name=\"{spec.name}\"><args>{payload}</args></tool_call>"
     )
     lines.append(f"Example (CMD): <CMD:{spec.name}({payload})>")
+    if spec.user_aliases:
+        lines.append(f"Aliases: {', '.join(spec.user_aliases)}")
+    if spec.common_mistakes:
+        for m in spec.common_mistakes:
+            lines.append(f"Common mistake: {m}")
     return "\n".join(lines)
 
 
