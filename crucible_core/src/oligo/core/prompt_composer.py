@@ -6,8 +6,11 @@ import json
 import logging
 import re
 from collections.abc import Collection
+from pathlib import Path
 from typing import Any
 from xml.etree import ElementTree as ET
+
+from jinja2 import Environment, FileSystemLoader, StrictUndefined
 
 from src.crucible.core.schemas import PromptComponent, PromptStage, ToolSpec
 from src.oligo.tools.registry import get_tool_registry
@@ -15,51 +18,32 @@ from src.oligo.tools.registry import get_tool_registry
 _global_composer: PromptComposer | None = None
 logger = logging.getLogger(__name__)
 
-# 与历史 ``agent._FINAL_GUARDRAIL`` 一致；在 composer 中作为模板，由 ``"\\n\\n".join`` 与上段衔接（模板本身无前置换行）。
-FINAL_GUARDRAIL_TEXT = (
-    "[EXECUTION CONTEXT]\n"
-    "All tool execution is complete. The tool results are already provided above. "
-    "You MUST NOT output any <CMD:...> tags or pseudo-tool-call syntax. "
-    "Synthesize the available evidence and respond in natural language only. "
-    "If evidence is insufficient, say so honestly — do NOT fabricate tool calls. "
-    "If a natural-language assistant turn appears after tool results, treat it as a router draft to "
-    "expand and rephrase in your role."
+_PROMPTS_DIR = Path(__file__).resolve().parent.parent / "prompts"
+_jinja_env = Environment(
+    loader=FileSystemLoader(str(_PROMPTS_DIR)),
+    trim_blocks=True,
+    lstrip_blocks=True,
+    undefined=StrictUndefined,
+    keep_trailing_newline=False,
 )
 
-# 字面大括号在 format 中需加倍；逻辑与未拆分前单块字符串相同。
-# 末尾不换行，由与 ``router_tool_registry`` 的 ``"\\n\\n".join`` 形成与旧版 ``accurately.\\n\\nAvailable`` 相同间距。
-ROUTER_INTRO = (
-    "You are the Chimera OS local router. Analyze the user's input and decide whether a tool "
-    "is needed to answer accurately.\n\n"
-    "Tool calling syntax (you may use either format):\n\n"
-    "Format A (XML, preferred):\n"
-    "<tool_call name=\"EXACT_TOOL_NAME_FROM_THE_LIST_BELOW\">\n"
-    "  <args>{{\"param\": \"value\"}}</args>\n"
-    "</tool_call>\n\n"
-    "For tools with no required parameters, use a literal empty object: <args>{{}}</args>, "
-    "or omit the <args>...</args> block entirely (empty args are treated as {{}}).\n\n"
-    "Format B (CMD, legacy compatible):\n"
-    "<CMD:EXACT_TOOL_NAME_FROM_THE_LIST_BELOW({{\"param\": \"value\"}})>\n\n"
-    "[TOOL CALLING POLICY]\n"
-    "- Output ONLY tool names that appear in the Available tools section below. "
-    "Never invent, alias, merge, or hallucinate tool identifiers.\n"
-    "- When the best tool or parameter shape is unclear, choose a tool from that list whose "
-    "documented parameters you can fill honestly from the user message; prefer simpler "
-    "read/search-style tools over multi-step pipelines you cannot parameterize.\n"
-    "- Do not place prose or instructions inside JSON args; values must match the listed types.\n\n"
-    "You may output multiple tool_call/CMD blocks in one response (they will run in parallel)."
-)
 
-ROUTER_POST_TOOLS = (
-    "Rules:\n"
-    "1. If calling a tool, use Format A or B with one JSON object per invocation. "
-    "Follow the parameter names, types, and examples under Available tools. "
-    "You may emit multiple invocations when parallel work is appropriate.\n"
-    "2. If no tool is needed, output <PASS> OR a short natural-language draft. "
-    "Do not emit <tool_call> or <CMD:...> unless executing a real listed tool.\n\n"
-    "META: When explaining XML or <CMD:...> to the user in prose, fence examples in markdown code "
-    "blocks (```) or inline backticks so the runtime does not execute them."
-)
+def _load_j2(name: str) -> str:
+    """Render a Jinja2 template at registration time (no variables).
+
+    Result is escaped for str.format() so literal braces survive compose().
+    """
+    rendered = _jinja_env.get_template(name).render().rstrip("\n")
+    return rendered.replace("{", "{{").replace("}", "}}")
+
+
+def _load_md(name: str) -> str:
+    """Load a plain .md template for compose-time str.format()."""
+    return (_PROMPTS_DIR / name).read_text(encoding="utf-8").rstrip("\n")
+
+
+# Exported for tests that assert on guardrail content.
+FINAL_GUARDRAIL_TEXT: str = _load_j2("final_guardrail.md.j2")
 
 
 def _param_meta(raw: Any) -> dict[str, Any]:
@@ -330,14 +314,14 @@ def get_prompt_composer() -> PromptComposer:
 def _register_default_components(composer: PromptComposer) -> None:
     """注册 ChimeraAgent 与 MW.0 审计对齐的默认片段。"""
 
-    # --- Router: intro (no tool lines) + tool block + rules/meta ---
+    # --- Router ---
     composer.register(
         PromptComponent(
             id="router_core",
             stage=PromptStage.ROUTER,
             priority=100,
             cacheable=True,
-            template=ROUTER_INTRO,
+            template=_load_j2("router_intro.md.j2"),
         )
     )
     composer.register(
@@ -346,7 +330,7 @@ def _register_default_components(composer: PromptComposer) -> None:
             stage=PromptStage.ROUTER,
             priority=90,
             cacheable=True,
-            template="Available tools:\n{tool_list}\n\n" + ROUTER_POST_TOOLS,
+            template="Available tools:\n{tool_list}\n\n" + _load_j2("router_post_tools.md.j2"),
         )
     )
     composer.register(
@@ -355,28 +339,7 @@ def _register_default_components(composer: PromptComposer) -> None:
             stage=PromptStage.ROUTER,
             priority=80,
             cacheable=True,
-            template=(
-                "[USER SKILL DIRECTIVE (FOLLOW THIS FOR YOUR REASONING)]:\n"
-                "{skill_override}"
-            ),
-        )
-    )
-    composer.register(
-        PromptComponent(
-            id="retrieval_context_demo",
-            stage=PromptStage.ROUTER,
-            priority=15,
-            cacheable=True,
-            renderer="xml_structured",
-            template={
-                "retrieval": {
-                    "source": "demo",
-                    "nodes": [
-                        {"id": "n1", "title": "Example"},
-                        {"id": "n2", "title": "Sample"},
-                    ],
-                }
-            },
+            template=_load_md("router_skill_directive.md"),
         )
     )
     # --- Final ---
@@ -386,7 +349,7 @@ def _register_default_components(composer: PromptComposer) -> None:
             stage=PromptStage.FINAL,
             priority=100,
             cacheable=True,
-            template="{system_core}",
+            template=_load_md("final_system_core.md"),
         )
     )
     composer.register(
@@ -395,7 +358,7 @@ def _register_default_components(composer: PromptComposer) -> None:
             stage=PromptStage.FINAL,
             priority=80,
             cacheable=True,
-            template="[SKILL DIRECTIVE]\n{skill_override}",
+            template=_load_md("final_skill_directive.md"),
         )
     )
     composer.register(
@@ -404,7 +367,7 @@ def _register_default_components(composer: PromptComposer) -> None:
             stage=PromptStage.FINAL,
             priority=60,
             cacheable=True,
-            template="\n[PERSONA OVERRIDE]\n{persona}",
+            template=_load_md("final_persona_override.md"),
         )
     )
     composer.register(
@@ -413,7 +376,7 @@ def _register_default_components(composer: PromptComposer) -> None:
             stage=PromptStage.FINAL,
             priority=40,
             cacheable=True,
-            template="\n[AUTHOR'S NOTE]\n{authors_note}",
+            template=_load_md("final_authors_note.md"),
         )
     )
     composer.register(

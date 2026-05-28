@@ -93,10 +93,8 @@ def test_get_prompt_composer_singleton_and_stub() -> None:
     b = get_prompt_composer()
     assert a is b
     assert a.get_component("nope") is None
-    demo = a.get_component("retrieval_context_demo")
-    assert demo is not None
-    assert demo.renderer == "xml_structured"
-    assert isinstance(demo.template, dict)
+    assert a.get_component("router_core") is not None
+    assert a.get_component("final_guardrail") is not None
 
 
 def test_render_xml_structured_nested_is_parseable_xml() -> None:
@@ -140,21 +138,6 @@ def test_prompt_component_renderer_validation() -> None:
             renderer="text",
             template={"x": 1},
         )
-
-
-def test_compose_retrieval_context_demo_when_active() -> None:
-    composer = get_prompt_composer()
-    stable, dynamic = composer.compose(
-        PromptStage.ROUTER,
-        {"tool_list": "- demo", "skill_override": "", "persona": "", "authors_note": ""},
-        active_ids={"retrieval_context_demo"},
-    )
-    blob = f"{stable}\n\n{dynamic}".strip()
-    assert "<structured>" in blob
-    assert "<retrieval>" in blob
-    assert "<source>demo</source>" in blob
-    assert "<title>Example</title>" in blob
-    ET.fromstring(blob)  # well-formed
 
 
 def test_router_persona_invariance() -> None:

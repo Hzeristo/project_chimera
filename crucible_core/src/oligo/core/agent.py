@@ -30,7 +30,7 @@ from src.crucible.core.schemas import (
 )
 from src.crucible.ports.llm.base import LLMClient
 from src.crucible.services.metrics_service import MetricsService
-from src.oligo.core.prompt_composer import _render_tool_list, get_prompt_composer
+from src.oligo.core.prompt_composer import _load_md, _render_tool_list, get_prompt_composer
 from src.oligo.core.sse import sse_event
 from src.oligo.core.text_sanitizer import TextSanitizer
 from src.oligo.core.tool_protocol import (
@@ -952,17 +952,11 @@ class ChimeraAgent:
         Intent-Driven Dynamic Wash：结合路由意图过滤工具噪声，始终经 Cognitive Filter（无字数门槛）。
         失败时降级为硬截断 + 后缀。
         """
-        washer_sys = (
-            "You are the Cognitive Filter of Project Chimera. Your job is to extract ONLY the "
-            "information necessary to fulfill the Agent's recent tool invocation, while aggressively "
-            "discarding noise. \n\n"
-            f"The Agent recently decided to call the tool `{tool_name}` with args `{tool_args}` "
-            f"based on this context:\n<CONTEXT>\n{context}\n</CONTEXT>\n\n"
-            "Here is the raw output from the tool:\n<RAW_OUTPUT>\n"
-            f"{raw_result}\n</RAW_OUTPUT>\n\n"
-            "Extract the facts, numbers, or conclusions relevant to the context. Do NOT write an essay. "
-            "If the raw output contains NOTHING relevant to the context, output exactly: "
-            "'[Wash Result]: No relevant information found.' Otherwise, output the dense, factual summary."
+        washer_sys = _load_md("wash_system_prompt.md").format(
+            tool_name=tool_name,
+            tool_args=tool_args,
+            context=context,
+            raw_result=raw_result,
         )
         compress_client = self.wash_client or self.llm_client
         x_len = len(raw_result)
