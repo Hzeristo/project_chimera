@@ -41,7 +41,7 @@ _FINAL_REGRESSION: set[str] = {
 }
 
 # MW.4 锁定：_combined_regression_prompt_bytes() 在默认组件下的 UTF-8 长度
-MW4_COMBINED_PROMPT_BASELINE_BYTES = 2594
+MW4_COMBINED_PROMPT_BASELINE_BYTES = 7492
 
 
 def _combined_regression_prompt_bytes() -> int:
@@ -189,19 +189,6 @@ def test_ir1_render_tool_list_exposes_schema_and_zero_arg_example() -> None:
     assert "  - query (str, required):" in blob
     assert "  - key (str, required):" in blob and "  - value (str, required):" in blob
 
-
-def test_ir1_router_system_message_within_char_cap() -> None:
-    from src.oligo.core.agent import ChimeraAgent
-
-    client = MockLLMClient(probe_response="<PASS>", final_response="done.")
-    agent = ChimeraAgent(
-        raw_messages=[{"role": "user", "content": "ping"}],
-        system_core="persona core",
-        skill_override=None,
-        llm_client=client,
-        router_client=client,
-    )
-    assert len(agent.messages[0].content) <= 4000
 
 
 def test_full_theater_pass_path_runs() -> None:

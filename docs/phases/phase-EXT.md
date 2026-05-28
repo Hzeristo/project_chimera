@@ -17,13 +17,16 @@
 |---|---|---|
 | EXT.0 | Audit: 当前 prompt 内联常量清单 +PromptComposer 渲染链路 | Sealed |
 | EXT.1 | 外部化: 所有 inline prompt → .md/.md.j2 文件, 行为不变 | Sealed `10a282a` |
-| EXT.2a | 结构脚手架: 移除 4000-char cap + router_intro.md.j2 占位段落头 | Pending |
-| EXT.2b | Router prompt 内容填充: 用户提供的 5500+ token 模板粘贴 + 验证 | Content delivered |
+| EXT.2a | 移除 4000-char cap + budget-shrink loop | Pending |
+| EXT.2b | 验证用户提供的 router_intro.md.j2 渲染正确; 更新 byte-lock | Content delivered |
+| EXT.2c | 新增 router_continuation.md.j2 + theater loop 按 turn 切换 system prompt | Pending |
+| EXT.2d | probe_response 解析前剥离 `<thinking>` 标签 | Pending |
 | EXT.3 | 工具描述 rich化: ToolSpec 加 user_aliases / examples / common_mistakes | Pending |
 | EXT.4 | Agentic theater讨论(架构决策, 不写代码) | Pending |
 
-Dependencies: EXT.0 precedes all. EXT.1 precedes EXT.2/EXT.3.
-EXT.2a precedes EXT.2b. EXT.4 is a design discussion, not implementation.
+Dependencies: EXT.0 precedes all. EXT.1 precedes EXT.2a–2d.
+EXT.2a → EXT.2b → EXT.2c → EXT.2d sequential. EXT.3 independent of EXT.2.
+EXT.4 is a design discussion, not implementation.
 
 ## Cross-Sprint Red Lines
 
@@ -52,6 +55,35 @@ EXT.2a precedes EXT.2b. EXT.4 is a design discussion, not implementation.
   segment breakdown.
 - **Tool call format**: Keep `<tool_call name="..."><args>...</args></tool_call>`.
   Do NOT adopt Anthropic's ANTML `<function_calls><invoke>` format (provider-agnostic).
+  
+- **Router as cognitive agent, Final as persona wrapper (ST 2026-05-27)**:
+  Router is the cognitive subject of the entire turn — it understands intent,
+  formulates retrieval strategy, evaluates results, and synthesizes answers.
+  Final stage is a thin persona-application layer that rewrites Router's
+  synthesis in the active persona's voice. Router does the thinking; Final
+  does the styling.
+
+- **First-turn vs continuation system prompt separation (ST 2026-05-27)**:
+  Turn 1 injects the full router_intro.md.j2 (identity + intent framework +
+  tool list + syntax + constraints + examples, ~1650 tokens static).
+  Turn 2+ injects only router_continuation.md.j2 (~200 tokens): a focused
+  evaluation-and-next-step directive. This prevents attention dilution and
+  saves ~1400 tokens per subsequent turn. Implementation: agent.py theater
+  loop selects system prompt by `turn == 0` vs `turn > 0`.
+
+- **`<thinking>` tags for Chain-of-Thought (ST 2026-05-27)**:
+  Router may output `<thinking>...</thinking>` blocks for internal reasoning
+  before tool calls or natural language. These are stripped by TextSanitizer
+  before reaching the user but logged for debugging. This is prompt-level CoT
+  (Approach A), not API-level extended thinking. No provider-specific API
+  changes needed. DeepSeek and Claude both respond well to this pattern.
+
+- **Legacy CMD format removal (ST 2026-05-27)**:
+  `<CMD:tool_name(args)>` format is removed from router prompt and will be
+  removed from tool_protocol.py parser in debt week. Only XML `<tool_call>`
+  format remains. Rationale: dual format dilutes attention, confuses non-Claude
+  models, and adds unnecessary parsing branches.
+
 
 ## Out of Scope
 

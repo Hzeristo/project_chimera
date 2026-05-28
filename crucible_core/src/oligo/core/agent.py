@@ -70,9 +70,6 @@ def _client_gone_exception_types() -> tuple[type[BaseException], ...]:
 
 CLIENT_GONE_EXCEPTIONS: tuple[type[BaseException], ...] = _client_gone_exception_types()
 
-# Router system prompt cap (IR.1): tool_list may shrink via ``_render_tool_list(..., max_chars=...)``.
-_ROUTER_SYSTEM_PROMPT_MAX_CHARS = 4000
-
 
 def _looks_like_pipe_broken(exc: BaseException) -> bool:
     """Uvicorn/ASGI sometimes surfaces broken pipes as OSError or RuntimeError."""
@@ -486,37 +483,23 @@ class ChimeraAgent:
         return _render_tool_list(self.allowed_tools, max_chars=max_chars)
 
     def _build_router_system_prompt(self) -> str:
-        """从 ``PromptComposer`` 组装路由 System 文案（与 MW.0 拆分前语义一致）。"""
+        """从 ``PromptComposer`` 组装路由 System 文案。"""
         composer = get_prompt_composer()
         active_ids = self._compute_active_router_components()
-        budgets: list[int | None] = [None, 3200, 2400, 1800, 1200, 800]
-        last_body = ""
-        for tb in budgets:
-            context = self._prompt_context(tool_list_max_chars=tb)
-            stable, dynamic = composer.compose(
-                stage=PromptStage.ROUTER,
-                context=context,
-                active_ids=active_ids,
-            )
-            logger.debug(
-                "[Prompt] router compose stable_len=%s dynamic_len=%s tool_budget=%s",
-                len(stable),
-                len(dynamic),
-                tb,
-            )
-            body = f"{stable}\n\n{dynamic}".strip()
-            last_body = body
-            if len(body) <= _ROUTER_SYSTEM_PROMPT_MAX_CHARS:
-                return body
-
-        if len(last_body) > _ROUTER_SYSTEM_PROMPT_MAX_CHARS:
-            logger.warning(
-                "[Prompt] router system prompt len=%s exceeds %s after tool_list budgets; truncating",
-                len(last_body),
-                _ROUTER_SYSTEM_PROMPT_MAX_CHARS,
-            )
-            return last_body[: _ROUTER_SYSTEM_PROMPT_MAX_CHARS - 3] + "..."
-        return last_body
+        context = self._prompt_context()
+        stable, dynamic = composer.compose(
+            stage=PromptStage.ROUTER,
+            context=context,
+            active_ids=active_ids,
+        )
+        body = f"{stable}\n\n{dynamic}".strip()
+        logger.debug(
+            "[Prompt] router compose stable_len=%s dynamic_len=%s total_len=%s",
+            len(stable),
+            len(dynamic),
+            len(body),
+        )
+        return body
 
     def _apply_history_sanitizer_to_messages(self) -> None:
         """位点 C：在送往 LLM 前清洗 ``self.messages`` 历史（层 3）。"""
