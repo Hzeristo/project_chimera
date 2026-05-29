@@ -121,7 +121,13 @@ def _register_default_tools(reg: ToolRegistry) -> None:
             concurrency_safe=True,
             long_running=False,
             user_aliases=["搜索", "查找", "find notes", "vault search", "搜笔记", "找笔记"],
-            examples=['search_vault({"query": "MemoryR1"})'],
+            examples=[
+                '<tool_call name="search_vault"><args>{"query": "MemGPT"}</args></tool_call>',
+                '<tool_call name="search_vault"><args>{"query": "memory decay"}</args></tool_call>',
+                '<tool_call name="search_vault"><args>{"query": "long context evaluation"}</args></tool_call>',
+                '<tool_call name="search_vault"><args>{"query": "KV cache"}</args></tool_call>',
+                '<tool_call name="search_vault"><args>{"query": "agent memory benchmark"}</args></tool_call>',
+            ],
         ),
     )
     reg.register(
@@ -138,6 +144,13 @@ def _register_default_tools(reg: ToolRegistry) -> None:
             },
             concurrency_safe=True,
             long_running=False,
+            examples=[
+                '<tool_call name="read_vault_file"><args>{"path": "K-2410.10813v2-LongMemEval.md"}</args></tool_call>',
+                '<tool_call name="read_vault_file"><args>{"path": "T-memory-decay-observation.md"}</args></tool_call>',
+                '<tool_call name="read_vault_file"><args>{"path": "I-bench-design-criteria.md"}</args></tool_call>',
+                '<tool_call name="read_vault_file"><args>{"path": "D-pivot-from-rag-to-graph.md"}</args></tool_call>',
+                '<tool_call name="read_vault_file"><args>{"path": "K-MemGPT-deep-read.md"}</args></tool_call>'
+            ],
         ),
     )
     reg.register(
@@ -167,6 +180,13 @@ def _register_default_tools(reg: ToolRegistry) -> None:
             },
             concurrency_safe=True,
             long_running=False,
+            examples=[
+                '<tool_call name="search_vault_attribute"><args>{"key": "type", "value": "knowledge"}</args></tool_call>',
+                '<tool_call name="search_vault_attribute"><args>{"key": "tags", "value": "deep_read"}</args></tool_call>',
+                '<tool_call name="search_vault_attribute"><args>{"key": "chimera_status", "value": "deep_read"}</args></tool_call>',
+                '<tool_call name="search_vault_attribute"><args>{"key": "architecture_types", "value": "RAG"}</args></tool_call>',
+                '<tool_call name="search_vault_attribute"><args>{"key": "type", "value": "insight"}</args></tool_call>'
+            ],
         ),
     )
     reg.register(
@@ -196,6 +216,13 @@ def _register_default_tools(reg: ToolRegistry) -> None:
             },
             concurrency_safe=True,
             long_running=False,
+            examples=[
+                '<tool_call name="obsidian_graph_query"><args>{"node_type": "knowledge"}</args></tool_call>',
+                '<tool_call name="obsidian_graph_query"><args>{"node_type": "thought"}</args></tool_call>',
+                '<tool_call name="obsidian_graph_query"><args>{"node_type": "insight"}</args></tool_call>',
+                '<tool_call name="obsidian_graph_query"><args>{"link_pattern": "MemGPT"}</args></tool_call>',
+                '<tool_call name="obsidian_graph_query"><args>{"node_type": "decision"}</args></tool_call>',
+            ],
         ),
     )
     reg.register(
@@ -212,6 +239,13 @@ def _register_default_tools(reg: ToolRegistry) -> None:
             },
             concurrency_safe=True,
             long_running=False,
+            examples=[
+                '<tool_call name="web_search"><args>{"query": "DeepSeek V4 release"}</args></tool_call>',
+                '<tool_call name="web_search"><args>{"query": "Anthropic Claude 4.7 features"}</args></tool_call>',
+                '<tool_call name="web_search"><args>{"query": "NeurIPS 2026 deadline"}</args></tool_call>',
+                '<tool_call name="web_search"><args>{"query": "LongMemEval benchmark paper arxiv"}</args></tool_call>',
+                '<tool_call name="web_search"><args>{"query": "agent memory survey 2026"}</args></tool_call>',
+            ],
         ),
     )
     reg.register(
@@ -237,7 +271,13 @@ def _register_default_tools(reg: ToolRegistry) -> None:
             concurrency_safe=False,
             long_running=True,
             user_aliases=["爬取", "mine arxiv", "fetch arxiv", "搜索论文", "找论文", "arxiv搜索"],
-            examples=['arxiv_miner({"query": "memory augmented LLM agents"})'],
+            examples=[
+                '<tool_call name="arxiv_miner"><args>{"query": "agent memory", "max_results": 5}</args></tool_call>',
+                '<tool_call name="arxiv_miner"><args>{"query": "long context evaluation", "max_results": 10}</args></tool_call>',
+                '<tool_call name="arxiv_miner"><args>{"query": "KV cache compression"}</args></tool_call>',
+                '<tool_call name="arxiv_miner"><args>{"query": "retrieval augmented generation"}</args></tool_call>',
+                '<tool_call name="arxiv_miner"><args>{"query": "memory decay LLM agents"}</args></tool_call>',
+            ],
         ),
     )
     reg.register(
@@ -274,7 +314,13 @@ def _register_default_tools(reg: ToolRegistry) -> None:
             common_mistakes=[
                 "Do not call this if a pipeline is already running — check task status first.",
             ],
-            examples=['daily_paper_pipeline({})'],
+            examples=[
+                '<tool_call name="daily_paper_pipeline"><args>{}</args></tool_call>',
+                '<tool_call name="daily_paper_pipeline"><args>{"arxiv_query": "memory benchmark"}</args></tool_call>',
+                '<tool_call name="daily_paper_pipeline"><args>{"arxiv_max_results": 50}</args></tool_call>',
+                '<tool_call name="daily_paper_pipeline"><args>{"skip_telegram": true}</args></tool_call>',
+                '<tool_call name="daily_paper_pipeline"><args>{"arxiv_query": "agent memory", "skip_telegram": true}</args></tool_call>'
+            ],
         ),
     )
     reg.register(
@@ -297,7 +343,13 @@ def _register_default_tools(reg: ToolRegistry) -> None:
             common_mistakes=[
                 "Do not call this before starting a long-running tool — there will be no task_id yet.",
             ],
-            examples=['check_task_status({"task_id": "abc123"})'],
+            examples=[    
+                '<tool_call name="check_task_status"><args>{"task_id": "2ac758cf"}</args></tool_call>',
+                '<tool_call name="check_task_status"><args>{"task_id": "abc12345"}</args></tool_call>',
+                '<tool_call name="check_task_status"><args>{"task_id": "def67890"}</args></tool_call>',
+                '<tool_call name="check_task_status"><args>{"task_id": "fb25b471"}</args></tool_call>',
+                '<tool_call name="check_task_status"><args>{"task_id": "1234abcd"}</args></tool_call>'
+            ],
         ),
     )
 
