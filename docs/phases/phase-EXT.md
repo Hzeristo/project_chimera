@@ -1,6 +1,6 @@
 # Phase EXT — Prompt Externalization & Router Rewrite
 
-**Status:** Active
+**Status:** Sealed — 2026-06-11 (manual override; condition 3 waived by user)
 **Sealed predecessor:** III.C
 **Driving frictions:**
 - friction-260526 E1 (router不识别"爬取papers" = daily_paper_pipeline)
@@ -22,7 +22,7 @@
 | EXT.2c | 新增 router_continuation.md.j2 + theater loop 按 turn 切换 system prompt | Sealed `b757ced` |
 | EXT.2d | probe_response 解析前剥离 `<thinking>` 标签 | Sealed `b757ced` |
 | EXT.3 | 工具描述 rich化: ToolSpec 加 user_aliases / examples / common_mistakes | Sealed `a79fa0f` |
-| EXT.4 | Agentic theater讨论(架构决策, 不写代码) | Pending |
+| EXT.4 | Agentic theater讨论(架构决策, 不写代码) | Sealed — no decisions needed; both issues resolved by EXT.2c design |
 
 Dependencies: EXT.0 precedes all. EXT.1 precedes EXT.2a–2d.
 EXT.2a → EXT.2b → EXT.2c → EXT.2d sequential. EXT.3 independent of EXT.2.
@@ -83,6 +83,15 @@ EXT.4 is a design discussion, not implementation.
   removed from tool_protocol.py parser in debt week. Only XML `<tool_call>`
   format remains. Rationale: dual format dilutes attention, confuses non-Claude
   models, and adds unnecessary parsing branches.
+
+- **EXT.4 resolution (ST 2026-05-27)**:
+  Both discussion points resolved without new architecture:
+  (a) Final contamination: EXT.2c's continuation prompt + guardrail line
+      are sufficient. Hard code-level filter deferred to friction signal.
+  (b) Long task model: Option B (Router naturally guides user to
+      check_task_status) is the zero-cost default. No theater loop changes.
+  If friction recurs on either point, open a new sprint. Do not pre-build.
+
 
 
 ## Out of Scope

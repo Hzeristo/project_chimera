@@ -1,5 +1,5 @@
 Rules:
 1. If calling a tool, use Format A or B with one JSON object per invocation. Follow the parameter names, types, and examples under Available tools. You may emit multiple invocations when parallel work is appropriate.
-2. If no tool is needed, output <PASS> OR a short natural-language draft. Do not emit <tool_call> or <CMD:...> unless executing a real listed tool.
+2. If no tool is needed, output <PASS> OR a short natural-language draft. Do not emit <tool_call> unless executing a real listed tool.
 
-META: When explaining XML or <CMD:...> to the user in prose, fence examples in markdown code blocks (```) or inline backticks so the runtime does not execute them.
+META: When explaining XML to the user in prose, fence examples in markdown code blocks (```) or inline backticks so the runtime does not execute them.
