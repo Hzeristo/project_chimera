@@ -134,6 +134,9 @@
   --line-normal: 1.5;
   --line-relaxed: 1.6;
 
+  /* 控件尺寸：共享 e/d/r + 反馈按钮行高 */
+  --control-h-xs: 18px;
+
   /* 兼容：原语义 + 正文字体栈 */
   --astrocyte-neural-purple-dim: var(--astrocyte-purple-a-35);
   --font-body: 'Inter', -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif;
@@ -236,6 +239,11 @@ button.btn,
   box-sizing: border-box;
 }
 
+.btn.btn--icon {
+  padding: 0;
+  border-radius: 0;
+}
+
 button.btn:hover:not(:disabled),
 .btn:hover:not(:disabled) {
   border-color: var(--astrocyte-purple-border);
@@ -256,20 +264,25 @@ button.btn:disabled,
 }
 
 .btn--icon {
-  width: 14px;
-  height: 14px;
-  min-width: 14px;
-  min-height: 14px;
+  box-sizing: border-box;
+  width: var(--control-h-xs);
+  height: var(--control-h-xs);
+  flex: 0 0 var(--control-h-xs);
+  aspect-ratio: 1 / 1;
+  min-width: unset;
+  min-height: unset;
   padding: 0;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  font-size: 9px;
+  overflow: hidden;
+  font-size: var(--font-xs);
   line-height: 1;
   font-family: var(--font-mono);
   font-weight: 500;
   border-color: var(--astrocyte-purple-a-45);
   background: var(--surface-chrome-88);
+  border-radius: 0;
 }
 
 button.btn--icon:hover:not(:disabled),
@@ -626,11 +639,11 @@ button.btn-danger:disabled,
 
 /* Oligo 分段遥测：可反馈阶段卡片 */
 .hud-output .stage-card {
-  padding: var(--space-3);
+  padding: var(--space-1) var(--space-2);
   border-radius: var(--radius-sm);
   border: 1px solid var(--border-hud-emphasis);
   background: var(--surface-3);
-  margin: 0 0 0.5em;
+  margin: 0 0 var(--space-2);
   max-width: 100%;
   box-sizing: border-box;
 }
@@ -639,13 +652,13 @@ button.btn-danger:disabled,
   display: flex;
   align-items: center;
   gap: var(--space-2);
-  margin-bottom: var(--space-2);
+  margin-bottom: var(--space-1);
   flex-wrap: wrap;
 }
 
 .hud-output .stage-card .stage-label {
   font-family: var(--font-mono);
-  font-size: 9px;
+  font-size: var(--font-xs);
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--astrocyte-purple-a-90);
@@ -653,14 +666,14 @@ button.btn-danger:disabled,
 
 .hud-output .stage-card .stage-name {
   font-family: var(--font-mono);
-  font-size: 9px;
-  color: #d0c8e0;
+  font-size: var(--font-xs);
+  color: var(--astrocyte-read-fg);
 }
 
 .hud-output .stage-card .stage-content {
   font-family: var(--font-mono);
-  font-size: 10px;
-  color: rgba(200, 200, 210, 0.85);
+  font-size: var(--font-xs);
+  color: var(--astrocyte-read-fg-muted);
   line-height: 1.4;
   white-space: pre-wrap;
   word-break: break-word;
@@ -669,26 +682,34 @@ button.btn-danger:disabled,
 .hud-output .stage-card .stage-feedback {
   display: flex;
   gap: var(--space-2);
-  margin-top: var(--space-2);
+  margin-top: var(--space-1);
 }
 
 /* 与 .btn .btn--hud 组合使用；此处仅修正 Stage 内尺度 */
-.hud-output .stage-card .stage-fb {
-  min-width: 28px;
-  font-size: 12px;
+/* .hud-output .stage-card .stage-fb {
+  min-width: var(--control-h-xs);
+  height: var(--control-h-xs);
+  font-size: var(--font-sm);
   line-height: 1;
-  border-radius: var(--radius-sm);
-}
+  border-radius: 0;
+} */
 
-.hud-output .stage-card .stage-fb:hover:not(:disabled) {
+.fb-good { color: var(--feedback-good); }
+.fb-bad  { color: var(--feedback-bad); }
+.fb-good:hover { border-color: var(--feedback-good); }
+.fb-bad:hover  { border-color: var(--feedback-bad); }
+.btn--icon.fb-good { color: var(--feedback-good); }
+.btn--icon.fb-bad  { color: var(--feedback-bad); }
+
+/* .hud-output .stage-card .stage-fb:hover:not(:disabled) {
   border-color: var(--astrocyte-neural-purple);
   background: var(--astrocyte-purple-a-08);
-}
+} */
 
 .hud-output .stage-card .stage-feedback-done {
-  margin-top: var(--space-2);
+  margin-top: var(--space-1);
   font-family: var(--font-mono);
-  font-size: 9px;
+  font-size: var(--font-xs);
   color: var(--astrocyte-purple-a-65);
 }
 
