@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onDestroy, onMount, tick } from 'svelte';
   import { invoke } from '@tauri-apps/api/core';
-  import { listen } from '@tauri-apps/api/event';
+  import { listen, emit } from '@tauri-apps/api/event';
   import ActiveTaskPanel from '$lib/ActiveTaskPanel.svelte';
   import ActiveToolTelemetry from '$lib/ActiveToolTelemetry.svelte';
   import { marked } from 'marked';
@@ -204,6 +204,7 @@
   let unlistenSublimateRequest: (() => void) | null = null;
   let unlistenLoadSession: (() => void) | null = null;
   let unlistenNewSignal: (() => void) | null = null;
+  let unlistenSessionDeleted: (() => void) | null = null;
   let editTextareaEl: HTMLTextAreaElement | null = null;
   const markdownCache = new Map<string, { text: string; html: string }>();
 
@@ -858,6 +859,7 @@
     viewingArchive = null;
     markdownCache.clear();
     await refreshSessionHistory();
+    await emit('session-list-changed', null);
   }
 
   function calculateGap(session: TimelineNode): number {
@@ -1726,6 +1728,14 @@
       await startNewSignal();
     });
 
+    unlistenSessionDeleted = await listen<string>('session-deleted', async (event) => {
+      const deletedId = typeof event.payload === 'string' ? event.payload : '';
+      sessionSummaries = sessionSummaries.filter((s) => s.id !== deletedId);
+      if (activeSessionId === deletedId) {
+        await resetToNewSignal();
+      }
+    });
+
     await loadSystemMetrics();
     systemMetricsRefresh = setInterval(() => {
       void loadSystemMetrics();
@@ -1764,6 +1774,10 @@
     if (unlistenNewSignal) {
       unlistenNewSignal();
       unlistenNewSignal = null;
+    }
+    if (unlistenSessionDeleted) {
+      unlistenSessionDeleted();
+      unlistenSessionDeleted = null;
     }
     if (systemMetricsRefresh !== null) {
       clearInterval(systemMetricsRefresh);
@@ -1970,6 +1984,13 @@
           data-sender={msg.sender}
           data-stream-aborted={msg.streamAborted ? 'true' : undefined}
         >
+          {#if msg.sender === 'user' || msg.sender === 'bb'}
+            <div class="msg-actions" aria-label="assistant message actions">
+              <button class="btn btn--icon msg-action" type="button" title="Edit" on:click={() => onAiAction('edit', msg)}>E</button>
+              <button class="btn btn--icon msg-action" type="button" title="Delete" on:click={() => onAiAction('delete', msg)}>D</button>
+              <button class="btn btn--icon msg-action" type="button" title="Retry" disabled={msg.sender !== 'bb' || msg.isLoading || isGenerating} on:click={() => onAiAction('retry', msg)}>R</button>
+            </div>
+          {/if}
           {#if editingMessageId === msg.id}
             <textarea
               class="msg-editor"
@@ -1991,7 +2012,7 @@
                 <div class="stage-feedback">
                   <button
                     type="button"
-                    class="btn btn--hud stage-fb stage-fb-good"
+                    class="btn btn--icon fb-good"
                     title="Good"
                     on:click={() => feedbackStage(msg.id, 'good')}
                   >
@@ -1999,7 +2020,7 @@
                   </button>
                   <button
                     type="button"
-                    class="btn btn--hud stage-fb stage-fb-bad"
+                    class="btn btn--icon fb-good"
                     title="Bad"
                     on:click={() => feedbackStage(msg.id, 'bad')}
                   >
@@ -2065,13 +2086,6 @@
           {:else}
             <div class="msg-content" data-sender={msg.sender} data-loading={msg.isLoading ? 'true' : undefined}>
               {msg.text}
-            </div>
-          {/if}
-          {#if msg.sender === 'user' || msg.sender === 'bb'}
-            <div class="msg-actions" aria-label="assistant message actions">
-              <button class="btn btn--icon msg-action" type="button" title="Edit" on:click={() => onAiAction('edit', msg)}>E</button>
-              <button class="btn btn--icon msg-action" type="button" title="Delete" on:click={() => onAiAction('delete', msg)}>D</button>
-              <button class="btn btn--icon msg-action" type="button" title="Retry" disabled={msg.sender !== 'bb' || msg.isLoading || isGenerating} on:click={() => onAiAction('retry', msg)}>R</button>
             </div>
           {/if}
         </article>
@@ -2735,10 +2749,7 @@
   }
 
   .msg-row {
-    position: relative;
     margin: 0 0 0.5em;
-    /* Magic number: specific layout requirement — 为消息行右侧 HUD 控件/操作区预留，避免与气泡重叠 */
-    padding-right: 52px;
   }
 
   .hud-output .msg-content {
@@ -2767,10 +2778,9 @@
   }
 
   .msg-actions {
-    position: absolute;
-    top: 0;
-    right: 0;
-    display: inline-flex;
+    display: flex;
+    justify-content: flex-end;
+    align-items: center;
     gap: var(--space-1);
     opacity: 0;
     pointer-events: none;
@@ -2799,11 +2809,14 @@
     opacity: 1;
   }
 
-  /* 反馈：HUD 上的小字文案（与 .btn--hud 组合） */
+  /* 反馈：与 e/d/r 共享行高，宽度 auto */
   .feedback-btn {
-    font-size: 10px;
+    height: var(--control-h-xs);
+    font-size: var(--font-xs);
     letter-spacing: 0.04em;
     padding-inline: var(--space-2);
+    line-height: 1;
+    border-radius: 0;
   }
 
   .feedback-btn:hover:not(:disabled) {
@@ -2813,7 +2826,7 @@
 
   .feedback-indicator {
     margin-top: var(--space-2);
-    font-size: 11px;
+    font-size: var(--font-xs);
     letter-spacing: 0.04em;
     color: var(--astrocyte-purple-a-75);
   }

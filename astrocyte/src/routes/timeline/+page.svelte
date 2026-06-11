@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onDestroy, onMount } from 'svelte';
   import { invoke } from '@tauri-apps/api/core';
+  import { emit, listen, type UnlistenFn } from '@tauri-apps/api/event';
 
   type SessionSummary = {
     id: string;
@@ -19,6 +20,7 @@
   let isVisible = $state(false);
   let mouseInside = $state(false);
   let hideTimeout: ReturnType<typeof setTimeout> | null = null;
+  let unlistenSessionListChanged: UnlistenFn | null = null;
 
   let sessionSummaries = $state<SessionSummary[]>([]);
   let timelineNodes = $derived(buildTimelineNodes(sessionSummaries));
@@ -176,6 +178,7 @@
         hoveredSessionId = null;
         tooltipOpen = false;
       }
+      await emit('session-deleted', sessionId);
     } catch (e) {
       console.error('delete_session_history failed', e);
     }
@@ -189,11 +192,14 @@
     }
   }
 
-  onMount(() => {
+  onMount(async () => {
     document.documentElement.classList.add('timeline-route-host');
     window.addEventListener('focus', onWindowFocus);
     window.addEventListener('resize', onScrollReposition);
     void refreshSessions();
+    unlistenSessionListChanged = await listen('session-list-changed', () => {
+      void refreshSessions();
+    });
   });
 
   onDestroy(() => {
@@ -202,6 +208,10 @@
     document.documentElement.classList.remove('timeline-route-host');
     window.removeEventListener('focus', onWindowFocus);
     window.removeEventListener('resize', onScrollReposition);
+    if (unlistenSessionListChanged) {
+      unlistenSessionListChanged();
+      unlistenSessionListChanged = null;
+    }
   });
 </script>
 
