@@ -2,8 +2,8 @@
 
 Personal research OS for one user. Not a framework. Not SaaS.
 
-> **Last sealed:** Phase EXT — Prompt Externalization & Router Rewrite — 2026-06-11
-> **Active:** Phase IV (TBD)
+> **Last sealed:** Phase III.E — Oligo Orchestration Primitives — 2026-06-11
+> **Active:** Phase IV — Exocortex & Memory
 
 ---
 
@@ -85,6 +85,27 @@ Personal research OS for one user. Not a framework. Not SaaS.
 | EXT.4 | Agentic theater design discussion — resolved, no code needed | — |
 
 **Sealed:** 2026-06-11 (condition 3 waived by user).
+
+---
+
+### Phase III.E — Oligo Orchestration Primitives
+
+**Goal:** Upgrade Oligo from single-thread theater to multi-context orchestrator; three new primitives as Phase IV prerequisites.
+
+| Sprint | Deliverable | Commit |
+|---|---|---|
+| III.E.0 | Phase audit: context accumulation points + ChimeraAgent instantiation chain | — |
+| III.E.A | `fork_subagent` + `run_isolated`: isolated child agent, reuses wash/router clients, budget conservation, returns summary ≤ 4096 chars | `b40d69f` |
+| III.E.C | `archive_segment` / `unarchive_segment`: tombstone replaces segment in `self.messages`, original persisted to `~/.chimera/archive_log/` | `b40d69f` |
+| III.E.B | `TaskService.run_subprocess_task`: asyncio subprocess, stdout → `emit_stage_progress`, stall detection, exit≠0 → lesson via backward trace | `b40d69f` |
+| — | `fork_agent` registered as tool stub (e2e wiring deferred to Phase IV) | `b40d69f` |
+
+**HSC verification:**
+- HSC 1 (downgraded): 50K-token prompt via `fork_subagent` stays out of parent messages — unit test
+- HSC 2: `archive_segment` → tombstone in live context, recoverable via `unarchive_segment` — manually verified 2026-06-11
+- HSC 3: `run_subprocess_task` shows live progress in `ActiveTaskPanel`, produces DEAD_END lesson on failure — manually verified 2026-06-11
+
+**Sealed:** 2026-06-11.
 
 ---
 

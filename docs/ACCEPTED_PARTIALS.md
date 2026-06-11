@@ -98,4 +98,16 @@ Each entry: phase / sprint, partial description, reason for acceptance.
 
 ---
 
+## Phase III.E — Oligo Orchestration Primitives (sealed 2026-06-11)
+
+### III.E.A.1 — `fork_agent` tool stub: e2e wiring deferred to Phase IV
+- **Description:** `fork_agent` is registered in `ToolRegistry` with full `ToolSpec`, but the function body returns a stub message. The actual parent-agent injection (passing `self` into the tool call context) requires Phase IV infrastructure.
+- **Reason:** Tool registration is the Phase III.E deliverable. E2e wiring requires the `deep_research` tool and Phase IV.B call context, which are out of scope for III.E.
+
+### III.E.1.1 — HSC 1 downgraded: no real long-result router trigger path available
+- **Description:** Original HSC 1 ("50K paper via `fork_subagent` increases main context by < 1K tokens — verified by token count") was untestable: no router trigger path exists and no real long-result source is available at phase time. Downgraded to unit test: 50K-token prompt given to `fork_subagent` returns summary ≤ 4096 chars and parent `messages` does not contain the 50K content.
+- **Reason:** The structural isolation guarantee (child messages list never merges into parent) is what HSC 1 was protecting. The unit test verifies this directly. Token-count verification against a live LLM paper read is a Phase IV concern.
+
+---
+
 *Update protocol: Append-only at sprint seal. New entries appended by `chimera-sprint-discipline` phase_review mode under `<state_write_authority>` (auto-apply, no diff).*
