@@ -5,6 +5,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from src.oligo.tools.agent_tools import fork_agent
 from src.oligo.tools.miner_tools import (
     arxiv_miner,
     check_task_status,
@@ -21,6 +22,7 @@ from src.oligo.tools.web_search import web_search
 
 __all__ = [
     "TOOL_REGISTRY",
+    "fork_agent",
     "arxiv_miner",
     "check_task_status",
     "daily_paper_pipeline",

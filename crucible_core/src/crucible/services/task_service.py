@@ -8,6 +8,10 @@ import logging
 import time
 import uuid
 from collections.abc import Awaitable
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from src.crucible.ports.llm.base import LLMClient
 from datetime import datetime
 from enum import Enum
 from pathlib import Path
@@ -319,3 +323,71 @@ class TaskService:
     def get_task_status(self, task_id: str) -> Task:
         """Load current task state from disk."""
         return self._load_task(task_id)
+
+    async def run_subprocess_task(
+        self,
+        task_id: str,
+        cmd: list[str],
+        stall_timeout_s: float = 300.0,
+        wash_client: LLMClient | None = None,
+    ) -> None:
+        """Run cmd as subprocess; stream stdout → emit_stage_progress; handle exit/stall."""
+        task = self._load_task(task_id)
+        task.status = TaskStatus.RUNNING
+        task.progress = 0.0
+        task.progress_message = "Starting subprocess..."
+        self._save_task(task)
+
+        proc = await asyncio.create_subprocess_exec(
+            *cmd,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.STDOUT,
+        )
+
+        stdout_tail_lines: list[str] = []
+        try:
+            while True:
+                try:
+                    line_bytes = await asyncio.wait_for(
+                        proc.stdout.readline(),  # type: ignore[union-attr]
+                        timeout=stall_timeout_s,
+                    )
+                except asyncio.TimeoutError:
+                    proc.kill()
+                    await self.emit_failed(task_id, "stall: no stdout")
+                    return
+                if not line_bytes:
+                    break
+                line = line_bytes.decode("utf-8", errors="replace").rstrip()
+                stdout_tail_lines.append(line)
+                if len(stdout_tail_lines) > 50:
+                    stdout_tail_lines.pop(0)
+                await self.emit_stage_progress(task_id, message=line[:200])
+        finally:
+            await proc.wait()
+
+        rc = proc.returncode
+        if rc != 0:
+            tail = "\n".join(stdout_tail_lines)
+            lesson = (
+                await _extract_failure_lesson(tail, wash_client)
+                if wash_client is not None
+                else ""
+            )
+            error = f"exit {rc}" + (f" | lesson: {lesson}" if lesson else "")
+            await self.emit_failed(task_id, error)
+        else:
+            await self.emit_completed(task_id)
+
+
+async def _extract_failure_lesson(stdout_tail: str, wash_client: LLMClient) -> str:
+    prompt = (
+        "Given this failure log, what was the EARLIEST decision that led to this failure? "
+        "One sentence.\n\n" + stdout_tail[-2000:]
+    )
+    try:
+        return await wash_client.generate_raw_text(
+            [{"role": "user", "content": prompt}]
+        )
+    except Exception:
+        return "lesson extraction failed"

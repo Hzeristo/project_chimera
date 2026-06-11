@@ -6,6 +6,7 @@ from __future__ import annotations
 from collections.abc import Awaitable, Callable, Collection
 
 from src.crucible.core.schemas import PlannedToolCall, ToolOutput, ToolSpec
+from src.oligo.tools.agent_tools import fork_agent
 from src.oligo.tools.miner_tools import (
     arxiv_miner,
     check_task_status,
@@ -343,12 +344,55 @@ def _register_default_tools(reg: ToolRegistry) -> None:
             common_mistakes=[
                 "Do not call this before starting a long-running tool — there will be no task_id yet.",
             ],
-            examples=[    
+            examples=[
                 '<tool_call name="check_task_status"><args>{"task_id": "2ac758cf"}</args></tool_call>',
                 '<tool_call name="check_task_status"><args>{"task_id": "abc12345"}</args></tool_call>',
                 '<tool_call name="check_task_status"><args>{"task_id": "def67890"}</args></tool_call>',
                 '<tool_call name="check_task_status"><args>{"task_id": "fb25b471"}</args></tool_call>',
                 '<tool_call name="check_task_status"><args>{"task_id": "1234abcd"}</args></tool_call>'
+            ],
+        ),
+    )
+    reg.register(
+        fork_agent,
+        ToolSpec(
+            name="fork_agent",
+            description=(
+                "Spawn an isolated subagent to handle a self-contained subtask; "
+                "returns a text summary only — the subtask's full context never "
+                "enters the main conversation. "
+                "NOTE: e2e wiring is deferred to Phase IV. Currently returns a stub message."
+            ),
+            args_schema={
+                "prompt": {
+                    "type": "str",
+                    "required": True,
+                    "help": "The complete task prompt for the subagent.",
+                },
+                "system_core": {
+                    "type": "str",
+                    "required": False,
+                    "help": "Override system persona for the subagent (defaults to parent's).",
+                },
+                "max_turns": {
+                    "type": "int",
+                    "required": False,
+                    "help": "Turn budget for the subagent (capped by parent's remaining budget).",
+                },
+            },
+            concurrency_safe=False,
+            long_running=False,
+            user_aliases=["子任务", "subagent", "fork subagent", "delegate", "delegating"],
+            common_mistakes=[
+                "Do not nest fork_agent calls — subagents cannot fork further subagents.",
+                "Do not use for parallel tasks — fork_agent is sequential only.",
+            ],
+            examples=[
+                '<tool_call name="fork_agent"><args>{"prompt": "Summarise the key claims in the attached paper."}</args></tool_call>',
+                '<tool_call name="fork_agent"><args>{"prompt": "Extract all experiment table values from this text.", "max_turns": 2}</args></tool_call>',
+                '<tool_call name="fork_agent"><args>{"prompt": "List all cited papers in this excerpt."}</args></tool_call>',
+                '<tool_call name="fork_agent"><args>{"prompt": "What is the main contribution of this work?", "max_turns": 1}</args></tool_call>',
+                '<tool_call name="fork_agent"><args>{"prompt": "Translate this abstract to English and summarise."}</args></tool_call>',
             ],
         ),
     )
