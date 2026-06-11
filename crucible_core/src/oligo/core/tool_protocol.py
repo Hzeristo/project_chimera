@@ -98,6 +98,8 @@ def _parse_one_xml_match(match: re.Match[str]) -> ParsedToolCall | None:
 def parse_tool_calls_xml(text: str) -> list[ParsedToolCall]:
     """解析 XML 格式。失败片段跳过，不抛异常。"""
     results: list[ParsedToolCall] = []
+    text = re.sub(r'```(?:xml)?\s*\n?', '', text)
+    text = re.sub(r'\n?```', '', text)
     for m in TOOL_CALL_XML_PATTERN.finditer(text):
         pt = _parse_one_xml_match(m)
         if pt is not None:

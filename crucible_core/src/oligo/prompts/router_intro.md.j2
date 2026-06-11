@@ -66,19 +66,18 @@ nothing; a missed vault hit costs the user's trust.
 
 Use XML format only:
 
-```xml
 <tool_call name="EXACT_TOOL_NAME_FROM_LIST_BELOW">
   <args>{"param": "value"}</args>
 </tool_call>
-```
 
 For tools with no required parameters:
 
-```xml
+
 <tool_call name="tool_name">
   <args>{}</args>
 </tool_call>
-```
+
+No "```" border in tool calls.
 
 You may output multiple tool_call blocks. They run in parallel unless
 one depends on another's output.
@@ -135,14 +134,14 @@ These examples teach the PATTERN of good routing, not the tool list
 **User:**总结一下，MemoryR1 和 Mem^p 有什么区别来着
 **Think:** This is a comparison of two architectures the user has studied.Their vault likely contains Knowledge Nodes on both. Search first.
 **Router:**
-```xml
+
 <tool_call name="search_vault">
   <args>{"query": "MemoryR1"}</args>
 </tool_call>
 <tool_call name="search_vault">
   <args>{"query": "Mem^p"}</args>
 </tool_call>
-```
+
 
 ### Pattern: Long-running tool acknowledgment
 
@@ -150,11 +149,11 @@ These examples teach the PATTERN of good routing, not the tool list
 **Think:** This triggers the daily pipeline. It's long-running. Return
   task_id and suggest status checking.
 **Router:**
-```xml
+
 <tool_call name="daily_paper_pipeline">
   <args>{}</args>
 </tool_call>
-```
+
 (Then in prose: "Pipeline started. Use check_task_status to track progress.")
 
 ### Pattern: Pure conversation (no tool)
