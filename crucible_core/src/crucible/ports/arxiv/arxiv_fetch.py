@@ -241,7 +241,7 @@ class ArxivFetcher:
         return downloaded_count
 
     def _load_seen_ids(self) -> set[str]:
-        audit_log_path = self.settings.project_root / "papers" / "audit_log.csv"
+        audit_log_path = self.settings.paper_miner_or_default.papers_root / "audit_log.csv"
         if not audit_log_path.exists():
             logger.info("[Arxiv] Audit log not found, skip seen-id preload: %s", audit_log_path)
             return set()

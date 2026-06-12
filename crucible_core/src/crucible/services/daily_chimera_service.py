@@ -86,7 +86,7 @@ def run_daily_pipeline(
     logger.info("[Service] === Chimera Daily Pipeline Started ===")
 
     pm = settings.paper_miner_or_default
-    input_dir = pm.arxivpdf_dir or (settings.project_root / "papers" / "arxivpdf")
+    input_dir = pm.arxivpdf_dir
 
     _update_task_progress(
         task_service, task_id, 0.05, "ArXiv fetch (metadata + PDF download)..."
@@ -100,12 +100,8 @@ def run_daily_pipeline(
         f"ArXiv fetch done (new PDFs: {new_pdfs_count}).",
     )
 
-    raw_output_dir = pm.md_papers_raw_dir or (
-        settings.project_root / "papers" / "md_papers_raw"
-    )
-    clean_dir = pm.md_papers_dir or (
-        settings.project_root / "papers" / "md_papers"
-    )
+    raw_output_dir = pm.md_papers_raw_dir
+    clean_dir = pm.md_papers_dir
     _update_task_progress(
         task_service, task_id, 0.25, "PDF ingestion (MinerU) → markdown..."
     )
@@ -182,7 +178,7 @@ async def run_daily_pipeline_with_stage_events(
     logger.info("[Service] === Chimera Daily Pipeline Started (stage-event mode) ===")
 
     pm = settings.paper_miner_or_default
-    input_dir = pm.arxivpdf_dir or (settings.project_root / "papers" / "arxivpdf")
+    input_dir = pm.arxivpdf_dir
 
     await task_service.start_stage(
         task_id,
@@ -195,12 +191,8 @@ async def run_daily_pipeline_with_stage_events(
         task_id, 0.2, f"ArXiv fetch done (new PDFs: {new_pdfs_count})."
     )
 
-    raw_output_dir = pm.md_papers_raw_dir or (
-        settings.project_root / "papers" / "md_papers_raw"
-    )
-    clean_dir = pm.md_papers_dir or (
-        settings.project_root / "papers" / "md_papers"
-    )
+    raw_output_dir = pm.md_papers_raw_dir
+    clean_dir = pm.md_papers_dir
     await task_service.start_stage(
         task_id,
         stage_id=DailyPipelineStage.PDF_INGESTION[0],

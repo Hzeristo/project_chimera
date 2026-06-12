@@ -84,7 +84,16 @@ cache_size = 200
 cache_ttl_seconds = 300
 
 # ---------------------------------------------------------------------------
-# [astrocyte] — Tauri 桌面客户端
+# [paper_miner] — ArXiv / PDF pipeline paths and query
+# ---------------------------------------------------------------------------
+[paper_miner]
+# Default: <repo_root>/papers (no config needed for a fresh clone).
+# Override with an absolute path to decouple data from repo location across devices.
+# papers_root = "/absolute/path/to/your/papers"
+
+arxiv_query = "cat:cs.AI AND (all:memory OR all:agent OR all:RAG)"
+arxiv_max_results = 50
+
 # ---------------------------------------------------------------------------
 [astrocyte]
 # 主题：dark | light
