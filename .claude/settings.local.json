@@ -20,7 +20,16 @@
       "PowerShell(findstr /I \"final_contract architecture\")",
       "PowerShell(Select-String -Pattern \"FINAL_CONTRACT|ARCHITECTURE\")",
       "PowerShell(Get-ChildItem *)",
-      "PowerShell(Remove-Item D:/MAS/project_chimera/docs/phases/phase-III.C/_progress.md -Force)"
+      "PowerShell(Remove-Item D:/MAS/project_chimera/docs/phases/phase-III.C/_progress.md -Force)",
+      "Bash(git stash *)",
+      "Bash(./.venv/Scripts/python -m pytest tests/oligo/)",
+      "Bash(git add *)",
+      "Bash(git commit *)",
+      "Bash(./.venv/Scripts/python -m pytest tests/oligo/test_prompt_middleware_regression.py)",
+      "Bash(./.venv/Scripts/python -m pytest tests/oligo/test_prompt_middleware_regression.py tests/oligo/test_prompt_composer.py)",
+      "Bash(.venv/Scripts/python -c \"from src.oligo.tools.registry import get_tool_registry; r = get_tool_registry\\(\\); [print\\(name, len\\(spec.examples\\)\\) for name, spec in r._specs.items\\(\\)]\")",
+      "Bash(Get-ChildItem -Path . -Name agent.py, prompt_composer.py -ErrorAction SilentlyContinue)",
+      "Bash(Select-Object -ExpandProperty FullName)"
     ]
   }
 }
