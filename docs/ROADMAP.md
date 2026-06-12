@@ -2,7 +2,7 @@
 
 Personal research OS for one user. Not a framework. Not SaaS.
 
-> **Last sealed:** Phase III.E — Oligo Orchestration Primitives — 2026-06-11
+> **Last sealed:** Phase III.F — Path Canonicalization — 2026-06-12
 > **Active:** Phase IV — Exocortex & Memory
 
 ---
@@ -106,6 +106,29 @@ Personal research OS for one user. Not a framework. Not SaaS.
 - HSC 3: `run_subprocess_task` shows live progress in `ActiveTaskPanel`, produces DEAD_END lesson on failure — manually verified 2026-06-11
 
 **Sealed:** 2026-06-11.
+
+---
+
+### Phase III.F — Path Canonicalization
+
+**Goal:** Single canonical project-root via `platform.get_project_root()`; papers land at
+`<repo_root>/papers` by default, overridable via `config.toml`; closes Phase I.M2 gap.
+
+| Sprint | Deliverable | Commit |
+|---|---|---|
+| F.0 | Root-anchor consumer audit: 4 conflicting definitions mapped, scripts classified | — |
+| F.1 | `platform.get_project_root()` added; `config.py` `_repo_root()` eliminated; `PROJECT_ROOT` fixed (was `parents[3]` = `crucible_core/`, now `parents[4]` = repo root) | — |
+| F.2 | `arxiv_fetch._load_seen_ids` + `daily_chimera_service` fallbacks routed through `papers_root`; `config.example.toml` `[paper_miner]` section added | — |
+| F.3 | `D:\MAS\crucible_core\papers\` → `D:\MAS\project_chimera\papers\`; stale `config.toml` subdir overrides removed | — |
+| F.4 | `root_anchor_bypass` anti-pattern added to chimera-code-taste; grep verified (2 known-OK local-resource sites only); cross-device sim passed | — |
+
+**HSC verification:**
+- HSC 1: `grep parents` shows only `platform.py:27` (canonical) + `jinja_prompt_manager.py:26` (local resource, commented) — ✅
+- HSC 2: `papers_root` defaults to `<repo_root>/papers`; config override removes stale hardcodes — ✅
+- HSC 3: 10 files migrated; no `audit_log.csv` (no prior dedup state to preserve) — ✅
+- HSC 4: `get_project_root()` CWD-independent (verified by running from `C:\`) — ✅
+
+**Sealed:** 2026-06-12.
 
 ---
 
