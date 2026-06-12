@@ -26,18 +26,13 @@ from pydantic_settings.sources import (
     TomlConfigSettingsSource,
 )
 
-from src.crucible.core.platform import get_chimera_root, get_config_path
+from src.crucible.core.platform import get_chimera_root, get_config_path, get_project_root
 from src.crucible.core.schemas import OligoAgentConfig
 
 logger = logging.getLogger(__name__)
 
 
-def _repo_root() -> Path:
-    """Resolve repository root from this module location (src/crucible/core/config.py)."""
-    return Path(__file__).resolve().parents[3]
-
-
-PROJECT_ROOT = _repo_root()
+PROJECT_ROOT = get_project_root()
 
 _LLM_SECRET_KEY_NAMES_LOWER: frozenset[str] = frozenset({
     "openai_api_key",
@@ -312,7 +307,7 @@ class ChimeraConfig(BaseSettings):
     astrocyte: AstrocyteConfigBlock = Field(default_factory=AstrocyteConfigBlock)
 
     paper_miner: PaperMinerSettings | None = None
-    project_root: Path = Field(default_factory=_repo_root)
+    project_root: Path = Field(default=get_project_root())
 
     OPENAI_API_KEY: SecretStr | None = None
     DEEPSEEK_API_KEY: SecretStr | None = None

@@ -22,6 +22,11 @@ def _migrate_legacy_dotless_chimera() -> None:
         logger.info("[Config] Migrated data from ~/chimera to ~/.chimera")
 
 
+def get_project_root() -> Path:
+    """Repo root (project_chimera/). platform.py is at parents[4] from repo root."""
+    return Path(__file__).resolve().parents[4]
+
+
 def get_chimera_root() -> Path:
     """
     获取 Chimera 的根目录（用户数据目录）。
