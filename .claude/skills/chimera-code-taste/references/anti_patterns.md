@@ -17,3 +17,6 @@ Single `str` arg internally parsed as multi-field. Fix: Pydantic model.
 
 ## emoji_data
 Emoji as data tokens in parse targets or stored fields. Fix: semantic names; rendering decides icons.
+
+## root_anchor_bypass
+`Path(__file__).parents[N]` or `os.getcwd()` used to derive the repo root outside `platform.py`. Fix: call `platform.get_project_root()`. Exception: `__file__`-relative paths for local resources co-located with the module (e.g. a `prompts/` dir next to the file) are allowed — comment them as `# local resource`.

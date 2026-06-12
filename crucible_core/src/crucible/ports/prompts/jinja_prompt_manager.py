@@ -22,7 +22,7 @@ class PromptManager:
 
     def __init__(self, template_dir: str | Path | None = None) -> None:
         if template_dir is None:
-            # src/crucible/ports/prompts/jinja_prompt_manager.py -> parents[4] = repo root
+            # local resource: prompts/ is co-located with the repo, not a root anchor
             root = Path(__file__).resolve().parents[4]
             self.template_path = root / "prompts"
         else:
