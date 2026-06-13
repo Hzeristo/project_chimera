@@ -48,7 +48,6 @@ class TurnContext(BaseModel):
     turn_id: TurnId
     turn_number: int
     started_at: datetime = Field(default_factory=datetime.now)
-    # A.2/A.3 will add: current_state, carried StateContext, etc.
 
     model_config = ConfigDict(extra="forbid")
 
@@ -59,7 +58,6 @@ class ConversationContext(BaseModel):
     session_id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     active_persona_id: str | None = None
     active_skill_id: str | None = None
-    # A.2 will add: total_turns, state_history, etc.
 
     model_config = ConfigDict(extra="forbid")
 
@@ -182,6 +180,11 @@ class ExecutedToolResult(BaseModel):
     error_message: str | None = Field(default=None)
     elapsed_ms: int | None = Field(default=None)
     artifacts: list[Artifact] | None = Field(default=None)
+    # A.4 long-running task identity
+    task_id: str | None = Field(
+        default=None,
+        description="Set when a long_running tool spawned a background task.",
+    )
     # A.1 Identity threading
     turn_id: str | None = Field(
         default=None,
@@ -272,3 +275,45 @@ class AgentInvokeRequest(BaseModel):
         default=None,
         description="Caller-supplied session identity; auto-generated if absent.",
     )
+
+class AgentPhase(str, Enum):
+    """Thin label for the current async step. Observation only — does NOT
+    drive control flow (the coroutine flow is the machine)."""
+    ROUTING = "routing"            # probe call + parse CMD/PASS (incl. system-slot setup)
+    EXECUTING = "executing"        # tool dispatch + gather
+    AWAITING_TASK = "awaiting_task"  # suspended on long-running task completion (A.4)
+    WASHING = "washing"            # tool result compression
+    RENDERING = "rendering"        # compose messages for next turn
+    SYNTHESIZING = "synthesizing"  # Final: persona bind + generate + stream (incl. probe backfill)
+
+class RouteResult(BaseModel):
+    """ROUTING step output. Narrow — only what downstream steps need."""
+    probe_response: str
+    planned_calls: list[PlannedToolCall] = Field(default_factory=list)
+    wash_context: str | None = None      # captured at routing, consumed by washing
+    probe_for_cmd: str | None = None     # DSL-stripped probe, for history backfill
+    is_trivial: bool = False             # no-tool branch: trivial vs draft-worthy
+
+    model_config = ConfigDict(extra="forbid")
+
+
+class ExecuteResult(BaseModel):
+    """EXECUTING step output."""
+    executed_results: list[ExecutedToolResult]
+    has_long_running: bool = False       # signals A.4 whether to enter AWAITING_TASK
+
+    model_config = ConfigDict(extra="forbid")
+
+class TerminalReason(str, Enum):
+    """How a turn coroutine terminates. Returned by the turn, never a Phase."""
+    COMPLETED = "completed"            # SYNTHESIZING finished normally
+    TURN_EXHAUSTED = "turn_exhausted"  # max_turns reached without resolution
+    CLIENT_GONE = "client_gone"        # client disconnected mid-turn
+    LLM_TIMEOUT = "llm_timeout"        # LLM gateway exceeded deadline
+    TASK_FAILED = "task_failed"        # long-running task failed (A.4)
+
+
+class TurnOutcome(str, Enum):
+    """A turn either continues the loop (tools ran) or terminates it."""
+    CONTINUE = "continue"   # tools executed, loop to next turn
+    TERMINATE = "terminate" # synthesized final answer OR hit a terminal reason

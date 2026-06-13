@@ -19,13 +19,16 @@ from typing import Any, AsyncGenerator, Literal
 from collections.abc import Awaitable, Callable
 
 from src.oligo.core.schemas import (
+    AgentPhase,
     Artifact,
     ChatMessage,
     ConversationContext,
+    ExecuteResult,
     ExecutedToolResult,
     OligoAgentConfig,
     PlannedToolCall,
     PromptStage,
+    RouteResult,
     ToolCallStatus,
     ToolOutput,
     TurnContext,
@@ -44,7 +47,8 @@ from src.oligo.core.tool_protocol import (
 )
 from src.oligo.tools import TOOL_REGISTRY
 from src.oligo.tools.registry import get_tool_registry, partition_tool_calls
-
+from src.crucible.services.task_service import get_task_service
+from src.crucible.core.schemas import TaskEventType
 logger = logging.getLogger(__name__)
 
 CLIENT_SEVERED_WARNING = (
@@ -426,6 +430,7 @@ class ChimeraAgent:
         self.max_turns = max_turns
         self._metrics_service = metrics_service
         self._current_turn: int = 0
+        self._phase: AgentPhase = AgentPhase.ROUTING
         # A.1: conversation-level identity (default_factory generates UUID when session_id absent)
         self._conversation_ctx = (
             ConversationContext(session_id=session_id)
@@ -1154,6 +1159,174 @@ class ChimeraAgent:
         )
         return "\n".join(parts)
 
+    def _phase_event(self, phase: AgentPhase) -> str:
+        self._phase = phase
+        return sse_event("bb-phase-transition", {
+            "phase": phase.value,
+            "turn": self._current_turn,
+            "timestamp_ms": int(time.time() * 1000),
+        })
+
+    async def _step_route(self) -> RouteResult:
+        if self._current_turn > 1:
+            self.messages[0] = ChatMessage(
+                role="system",
+                content=self._build_router_continuation_prompt(),
+            )
+        logger.info("[Router] probe_begin turn=%s/%s", self._current_turn, self.max_turns)
+        if self.messages:
+            preview = self.messages[0].content[:1000] + (
+                "..." if len(self.messages[0].content) > 1000 else ""
+            )
+            logger.info("[Router] ROUTER SYS (first 1000 chars): %s", preview[:1000])
+        self._apply_history_sanitizer_to_messages()
+        api_messages = _messages_to_api(self.messages)
+        probe_response = await asyncio.wait_for(
+            self._router_client.generate_raw_text(api_messages),
+            timeout=_THEATER_LLM_OUTER_TIMEOUT_S,
+        )
+        logger.info("[Router] Full response (probe): %s", probe_response)
+        probe_response = TextSanitizer.strip_reasoning_tags(probe_response)
+        planned_calls = self._parse_tool_calls(probe_response)
+        logger.info("[Router] probe_end tool_calls=%s", len(planned_calls))
+        wash_context = self._wash_context_for_intent() if planned_calls else None
+        probe_for_cmd = _strip_markdown_code_for_cmd_extraction(probe_response)
+        backfill_draft = TextSanitizer.strip_tool_syntax_in_visible(probe_response)
+        is_trivial = _is_router_pass_or_trivial(backfill_draft)
+        return RouteResult(
+            probe_response=probe_response,
+            planned_calls=planned_calls,
+            wash_context=wash_context,
+            probe_for_cmd=probe_for_cmd,
+            is_trivial=is_trivial,
+        )
+
+    async def _step_execute(
+        self,
+        planned_calls: list[PlannedToolCall],
+        emit_tool_sse: Callable[[str], Awaitable[None]] | None,
+    ) -> ExecuteResult:
+        executed_results = await self._execute_tool_calls(
+            planned_calls, emit_tool_sse=emit_tool_sse
+        )
+        registry = get_tool_registry()
+        patched: list[ExecutedToolResult] = []
+        has_long_running = False
+        for er in executed_results:
+            raw = er.raw_result or ""
+            if (
+                registry.is_long_running(er.tool_name)
+                and raw.startswith("Task started: ")
+            ):
+                task_id = raw.removeprefix("Task started: ").strip()
+                er = er.model_copy(update={"task_id": task_id})
+                has_long_running = True
+            patched.append(er)
+        return ExecuteResult(executed_results=patched, has_long_running=has_long_running)
+
+    async def _step_wash(
+        self,
+        executed_results: list[ExecutedToolResult],
+        wash_context: str,
+    ) -> tuple[list[ExecutedToolResult], list[str]]:
+        washed, wash_events = await self._wash_tool_results(executed_results, wash_context)
+        self._accumulate_artifacts(washed)
+        sse_frames: list[str] = []
+        if not wash_events:
+            sse_frames.append(_sse_data(_sys_telemetry_obj({
+                "stage": "wash",
+                "content": "All tool results bypassed wash (under threshold).",
+            })))
+        for tool_name_w, raw_chars in wash_events:
+            sse_frames.append(_sse_data(_sys_telemetry_obj({
+                "stage": "wash",
+                "content": f"{tool_name_w}: {raw_chars} chars",
+                "tool_name": tool_name_w,
+                "raw_chars": raw_chars,
+            })))
+        return washed, sse_frames
+
+    def _step_render(
+        self,
+        executed_results: list[ExecutedToolResult],
+        probe_for_cmd: str,
+        turn_id: str,
+    ) -> None:
+        cmd_only = extract_tool_syntax_for_history(probe_for_cmd)
+        _cmd_len = len(cmd_only)
+        if _cmd_len > 8000:
+            cmd_only = f"{cmd_only[:8000]}\n...[truncated {_cmd_len - 8000} chars]"
+        self.messages.append(ChatMessage(role="assistant", content=cmd_only, turn_id=turn_id))
+        logger.info("[Wash] aggregate tool_results=%s", len(executed_results))
+        tool_result_message = self._render_tool_results_for_llm(executed_results)
+        self.messages.append(ChatMessage(role="user", content=tool_result_message, turn_id=turn_id))
+
+    async def _step_synthesize(
+        self,
+        probe_response: str,
+        is_trivial: bool,
+        turn_id: str,
+    ) -> AsyncGenerator[str, None]:
+        backfill_draft = TextSanitizer.strip_tool_syntax_in_visible(probe_response)
+        if not is_trivial:
+            self.messages.append(
+                ChatMessage(role="assistant", content=backfill_draft, turn_id=turn_id)
+            )
+            logger.info(
+                "[Router] probe_draft_backfill chars=%s (raw_len=%s)",
+                len(backfill_draft),
+                len(probe_response or ""),
+            )
+        yield _sse_data(_sys_telemetry_obj({
+            "stage": "router",
+            "decision": "pass",
+            "content": (
+                "Router decided no tools; draft backfilled for Final."
+                if not is_trivial
+                else "Router decided no tools are needed."
+            ),
+        }))
+        logger.info("[Final] begin (persona bind + generate buffer)")
+        self._apply_history_sanitizer_to_messages()
+        final_system = ChatMessage(
+            role="system",
+            content=self._final_persona_system_content(),
+        )
+        tail = [m.model_copy(deep=True) for m in self.messages[1:]]
+        final_messages: list[ChatMessage] = [final_system, *tail]
+        fs_preview = final_system.content[:1000] + (
+            "..." if len(final_system.content) > 1000 else ""
+        )
+        logger.info("[Final] FINAL PERSONA SYS (first 150 chars): %s", fs_preview[:150])
+        try:
+            full_response = await asyncio.wait_for(
+                self.llm_client.generate_raw_text(_messages_to_api(final_messages)),
+                timeout=_THEATER_LLM_OUTER_TIMEOUT_S,
+            )
+        except asyncio.TimeoutError:
+            logger.error(
+                "[Final] LLM gateway timeout (final stream buffer, %.0fs watchdog)",
+                _THEATER_LLM_OUTER_TIMEOUT_S,
+            )
+            yield sse_event("bb-stream-done", {"error": True, "message": "LLM gateway timeout"})
+            return
+        logger.info("[Final] Full response (final stream): %s", full_response)
+        logger.info("[Final] buffer_ready chars=%s sse_chunking", len(full_response))
+        yield _sse_data(_sys_telemetry_obj({"stage": "final", "content": "Generating final response…"}))
+        stream_body = TextSanitizer.strip_tool_syntax_in_visible(
+            TextSanitizer.strip_reasoning_tags(full_response)
+        )
+        chunk_size = 3
+        for i in range(0, len(stream_body), chunk_size):
+            yield _sse_chunk(stream_body[i : i + chunk_size])
+            await asyncio.sleep(0.04)
+        if self._session_artifacts:
+            yield sse_event(
+                "bb-message-artifacts",
+                {"artifacts": [a.model_dump() for a in self._session_artifacts]},
+            )
+        logger.debug("[Oligo] Theater concluded on turn %s.", self._current_turn)
+
     async def _run_theater_stream(self) -> AsyncGenerator[str, None]:
         """Core theater loop; client-gone and pipe-broken handling live in ``run_theater`` only."""
         turn = 0
@@ -1161,302 +1334,143 @@ class ChimeraAgent:
         while turn < self.max_turns:
             turn += 1
             self._current_turn = turn
-            # A.1: turn-level identity (read-only; no executor change)
             _turn_ctx = TurnContext(
                 turn_id=TurnId.create(self._conversation_ctx.session_id, turn),
                 turn_number=turn,
             )
             logger.debug(f"[Oligo] Theater turn {turn}/{self.max_turns}")
+            turn_id_str = str(_turn_ctx.turn_id)
 
-            if turn > 1:
-                self.messages[0] = ChatMessage(
-                    role="system",
-                    content=self._build_router_continuation_prompt(),
-                )
-
-            # ---------- 步骤 A: 闭门思考（非流式！）----------
-            logger.info(
-                "[Router] probe_begin turn=%s/%s", turn, self.max_turns
-            )
-            if self.messages:
-                preview = self.messages[0].content[:1000] + (
-                    "..." if len(self.messages[0].content) > 1000 else ""
-                )
-                logger.info(
-                    "[Router] ROUTER SYS (first 1000 chars): %s",
-                    preview[:1000],
-                )
-            self._apply_history_sanitizer_to_messages()
-            api_messages = _messages_to_api(self.messages)
+            yield self._phase_event(AgentPhase.ROUTING)
             try:
-                probe_response = await asyncio.wait_for(
-                    self._router_client.generate_raw_text(api_messages),
-                    timeout=_THEATER_LLM_OUTER_TIMEOUT_S,
-                )
+                route = await self._step_route()
             except asyncio.TimeoutError:
                 logger.error(
                     "[Router] LLM gateway timeout (router probe, %.0fs watchdog)",
                     _THEATER_LLM_OUTER_TIMEOUT_S,
                 )
-                yield sse_event(
-                    "bb-stream-done",
-                    {"error": True, "message": "LLM gateway timeout"},
-                )
+                yield sse_event("bb-stream-done", {"error": True, "message": "LLM gateway timeout"})
                 return
 
-            # ---------- 步骤 B: 检查结果 ----------
-            logger.info("[Router] Full response (probe): %s", probe_response)
-            probe_response = TextSanitizer.strip_reasoning_tags(probe_response)
-            planned_calls = self._parse_tool_calls(probe_response)
-            logger.info(
-                "[Router] probe_end tool_calls=%s", len(planned_calls)
-            )
-
-            if len(planned_calls) > 0:
-                yield _sse_data(
-                    _sys_telemetry_obj(
-                        {
-                            "stage": "router",
-                            "content": f"{len(planned_calls)} tool calls planned",
-                            "decision": "parallel",
-                            "parallel_count": len(planned_calls),
-                        }
-                    )
-                )
-
-                for plan in planned_calls:
-                    tool_name = plan.tool_name
-                    tool_args = plan.raw_args
-                    logger.info(
-                        "[Router] Intercepted Raw Args from LLM: %r",
-                        tool_args,
-                    )
-
+            if route.planned_calls:
+                yield _sse_data(_sys_telemetry_obj({
+                    "stage": "router",
+                    "content": f"{len(route.planned_calls)} tool calls planned",
+                    "decision": "parallel",
+                    "parallel_count": len(route.planned_calls),
+                }))
+                for plan in route.planned_calls:
+                    logger.info("[Router] Intercepted Raw Args from LLM: %r", plan.raw_args)
                     tel_router: dict[str, Any] = {
                         "stage": "router",
-                        "content": f"Planning {tool_name}",
-                        "tool_name": tool_name,
-                        "decision": tool_name,
-                        "raw_args": tool_args,
+                        "content": f"Planning {plan.tool_name}",
+                        "tool_name": plan.tool_name,
+                        "decision": plan.tool_name,
+                        "raw_args": plan.raw_args,
                     }
                     if plan.repairs_applied:
                         tel_router["args_repaired"] = True
                         tel_router["repairs_applied"] = list(plan.repairs_applied)
                     yield _sse_data(_sys_telemetry_obj(tel_router))
-
                     if not plan.allowed:
-                        yield _sse_data(
-                            _sys_telemetry_obj(
-                                {
-                                    "stage": "tool",
-                                    "content": f"Denied: {tool_name}",
-                                    "tool_name": tool_name,
-                                    "deny_reason": (plan.deny_reason or ""),
-                                }
-                            )
-                        )
-
-                wash_context = self._wash_context_for_intent()
+                        yield _sse_data(_sys_telemetry_obj({
+                            "stage": "tool",
+                            "content": f"Denied: {plan.tool_name}",
+                            "tool_name": plan.tool_name,
+                            "deny_reason": (plan.deny_reason or ""),
+                        }))
 
                 tool_sse_q: asyncio.Queue[str | None] = asyncio.Queue()
 
                 async def emit_tool_sse(frame: str) -> None:
                     await tool_sse_q.put(frame)
 
-                async def _tool_runner() -> list[ExecutedToolResult]:
+                async def _run_execute(
+                    _calls: list[PlannedToolCall] = route.planned_calls,
+                    _emit: Callable[[str], Awaitable[None]] = emit_tool_sse,
+                ) -> ExecuteResult:
                     try:
-                        return await self._execute_tool_calls(
-                            planned_calls,
-                            emit_tool_sse=emit_tool_sse,
-                        )
+                        return await self._step_execute(_calls, _emit)
                     finally:
                         await tool_sse_q.put(None)
 
-                _tool_task = asyncio.create_task(_tool_runner())
+                yield self._phase_event(AgentPhase.EXECUTING)
+                execute_task = asyncio.create_task(_run_execute())
                 while True:
                     item = await tool_sse_q.get()
                     if item is None:
                         break
                     yield item
+                execute_result = await execute_task
 
-                executed_results = await _tool_task
+                for er in execute_result.executed_results:
+                    yield _sse_data(_sys_telemetry_obj({
+                        "stage": "tool",
+                        "content": f"{er.tool_name} → {er.status.name}",
+                        "tool_name": er.tool_name,
+                        "execution_status": er.status.name,
+                    }))
 
-                for er in executed_results:
-                    yield _sse_data(
-                        _sys_telemetry_obj(
-                            {
-                                "stage": "tool",
-                                "content": f"{er.tool_name} → {er.status.name}",
-                                "tool_name": er.tool_name,
-                                "execution_status": er.status.name,
-                            }
-                        )
+                yield self._phase_event(AgentPhase.WASHING)
+
+                if execute_result.has_long_running:
+                    yield self._phase_event(AgentPhase.AWAITING_TASK)
+                    svc = get_task_service()
+                    lr_ers = [er for er in execute_result.executed_results if er.task_id]
+                    events = await asyncio.gather(
+                        *[svc.await_completion(er.task_id) for er in lr_ers],
+                        return_exceptions=True,
                     )
-
-                executed_results, wash_events = await self._wash_tool_results(
-                    executed_results, wash_context
-                )
-
-                self._accumulate_artifacts(executed_results)
-
-                if not wash_events:
-                    yield _sse_data(
-                        _sys_telemetry_obj(
-                            {
-                                "stage": "wash",
-                                "content": "All tool results bypassed wash (under threshold).",
-                            }
-                        )
+                    event_by_call = {er.call_id: ev for er, ev in zip(lr_ers, events)}
+                    patched_ers: list[ExecutedToolResult] = []
+                    for er in execute_result.executed_results:
+                        ev = event_by_call.get(er.call_id)
+                        if ev is None:
+                            patched_ers.append(er)
+                        elif isinstance(ev, BaseException):
+                            patched_ers.append(er.model_copy(update={
+                                "status": ToolCallStatus.ERROR,
+                                "error_message": f"await failed: {ev}",
+                                "washed_result": f"[Task await failed] {ev}",
+                            }))
+                        elif ev.event_type == TaskEventType.COMPLETED:
+                            patched_ers.append(er.model_copy(update={
+                                "washed_result": ev.message or "",
+                                "raw_result": ev.message or "",
+                                "status": ToolCallStatus.SUCCESS,
+                            }))
+                        else:
+                            patched_ers.append(er.model_copy(update={
+                                "status": ToolCallStatus.ERROR,
+                                "error_message": ev.error or "task failed",
+                                "washed_result": f"[Task failed] {ev.error or ''}",
+                            }))
+                    washed, wash_frames = await self._step_wash(
+                        patched_ers, route.wash_context or ""
                     )
+                    for frame in wash_frames:
+                        yield frame
+                    self._step_render(washed, route.probe_for_cmd or "", turn_id_str)
+                    continue
 
-                for tool_name_w, raw_chars in wash_events:
-                    yield _sse_data(
-                        _sys_telemetry_obj(
-                            {
-                                "stage": "wash",
-                                "content": f"{tool_name_w}: {raw_chars} chars",
-                                "tool_name": tool_name_w,
-                                "raw_chars": raw_chars,
-                            }
-                        )
-                    )
+                washed, wash_frames = await self._step_wash(
+                    execute_result.executed_results, route.wash_context or ""
+                )
+                for frame in wash_frames:
+                    yield frame
 
-                probe_for_cmd = _strip_markdown_code_for_cmd_extraction(
-                    probe_response
-                )
-                cmd_only = extract_tool_syntax_for_history(probe_for_cmd)
-                _cmd_len = len(cmd_only)
-                if _cmd_len > 8000:
-                    cmd_only = (
-                        f"{cmd_only[:8000]}\n...[truncated {_cmd_len - 8000} chars]"
-                    )
-                self.messages.append(
-                    ChatMessage(role="assistant", content=cmd_only, turn_id=str(_turn_ctx.turn_id))
-                )
-
-                logger.info(
-                    "[Wash] aggregate tool_results=%s",
-                    len(executed_results),
-                )
-
-                tool_result_message = self._render_tool_results_for_llm(
-                    executed_results
-                )
-                self.messages.append(
-                    ChatMessage(role="user", content=tool_result_message, turn_id=str(_turn_ctx.turn_id))
-                )
-
+                yield self._phase_event(AgentPhase.RENDERING)
+                self._step_render(washed, route.probe_for_cmd or "", turn_id_str)
                 continue
 
-            backfill_draft = TextSanitizer.strip_tool_syntax_in_visible(
-                probe_response
-            )
-            _probe_trivial = _is_router_pass_or_trivial(backfill_draft)
-            if not _probe_trivial:
-                self.messages.append(
-                    ChatMessage(role="assistant", content=backfill_draft, turn_id=str(_turn_ctx.turn_id))
-                )
-                logger.info(
-                    "[Router] probe_draft_backfill chars=%s (raw_len=%s)",
-                    len(backfill_draft),
-                    len(probe_response or ""),
-                )
-
-            yield _sse_data(
-                _sys_telemetry_obj(
-                    {
-                        "stage": "router",
-                        "decision": "pass",
-                        "content": (
-                            "Router decided no tools; draft backfilled for Final."
-                            if not _probe_trivial
-                            else "Router decided no tools are needed."
-                        ),
-                    }
-                )
-            )
-
-            # ---------- 步骤 C: 晚期绑定 + 终极推流 ----------
-            logger.info("[Final] begin (persona bind + generate buffer)")
-            self._apply_history_sanitizer_to_messages()
-            final_system = ChatMessage(
-                role="system",
-                content=self._final_persona_system_content(),
-            )
-            tail = [m.model_copy(deep=True) for m in self.messages[1:]]
-            final_messages: list[ChatMessage] = [final_system, *tail]
-
-            fs_preview = final_system.content[:1000] + (
-                "..." if len(final_system.content) > 1000 else ""
-            )
-            logger.info(
-                "[Final] FINAL PERSONA SYS (first 150 chars): %s",
-                fs_preview[:150],
-            )
-
-            try:
-                full_response = await asyncio.wait_for(
-                    self.llm_client.generate_raw_text(
-                        _messages_to_api(final_messages)
-                    ),
-                    timeout=_THEATER_LLM_OUTER_TIMEOUT_S,
-                )
-            except asyncio.TimeoutError:
-                logger.error(
-                    "[Final] LLM gateway timeout (final stream buffer, %.0fs watchdog)",
-                    _THEATER_LLM_OUTER_TIMEOUT_S,
-                )
-                yield sse_event(
-                    "bb-stream-done",
-                    {"error": True, "message": "LLM gateway timeout"},
-                )
-                return
-
-            logger.info("[Final] Full response (final stream): %s", full_response)
-            logger.info(
-                "[Final] buffer_ready chars=%s sse_chunking",
-                len(full_response),
-            )
-
-            yield _sse_data(
-                _sys_telemetry_obj(
-                    {
-                        "stage": "final",
-                        "content": "Generating final response…",
-                    }
-                )
-            )
-
-            # 位点 A：整段先经层 1+2 再分块，避免 <thinking>/<CMD> 被 chunk 边界切开
-            stream_body = TextSanitizer.strip_tool_syntax_in_visible(
-                TextSanitizer.strip_reasoning_tags(full_response)
-            )
-            chunk_size = 3
-            for i in range(0, len(stream_body), chunk_size):
-                chunk = stream_body[i : i + chunk_size]
-                yield _sse_chunk(chunk)
-                await asyncio.sleep(0.04)
-
-            # FC.2a: emit aggregated artifacts as a single SSE frame on the
-            # success path, after final chunks and before return. Empty list
-            # → no frame (audit Q3, cross-finding 4).
-            if self._session_artifacts:
-                yield sse_event(
-                    "bb-message-artifacts",
-                    {
-                        "artifacts": [
-                            a.model_dump() for a in self._session_artifacts
-                        ],
-                    },
-                )
-
-            logger.debug(f"[Oligo] Theater concluded on turn {turn}.")
+            yield self._phase_event(AgentPhase.SYNTHESIZING)
+            async for chunk in self._step_synthesize(
+                route.probe_response, route.is_trivial, turn_id_str
+            ):
+                yield chunk
             return
 
-        # ---------- 步骤 D: 耗尽回合，Fallback ----------
-        error_msg = (
-            "\n\n[SYSTEM FATAL]: Agent exhausted max turns. Shutting down."
-        )
+        error_msg = "\n\n[SYSTEM FATAL]: Agent exhausted max turns. Shutting down."
         logger.error("[Oligo] Fallback: %s", error_msg)
         yield sse_event("bb-stream-done", {"error": True, "message": error_msg.strip()})
 

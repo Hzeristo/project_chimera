@@ -64,6 +64,10 @@ class ToolRegistry:
         spec = self._specs.get(name)
         return spec.concurrency_safe if spec else False
 
+    def is_long_running(self, name: str) -> bool:
+        spec = self._specs.get(name)
+        return spec.long_running if spec else False
+
 
 def partition_tool_calls(
     calls: list[PlannedToolCall],

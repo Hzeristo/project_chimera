@@ -35,25 +35,38 @@ This is "half-objectified" — Layer 1 (data) done, Layer 3 (process) missing.
 Adding async on top of half-objectified process produces async closures, not
 async state machines.
 
-Therefore Phase IV.A builds, in order:
-  Layer 2 — Identities (TurnId, explicit Conversation/Turn contexts)
-  Layer 3 — Process DDD (State enum, StateContext, StateTransition)
-  FSM refactor (replace while-loop, behavior-preserving)
-  THEN async (AWAITING_TASK as a state, suspend/resume on TaskService events)
+The execution model is coroutine-native, NOT a reified state machine.
+Python's async/await already compiles each async function into a state
+machine; each `await` is a suspension point. Building an explicit FSM
+(state enum + transition table + serializable context) on top of
+coroutines re-implements what the language provides for free.
 
-Async is a consequence of Layer 3, not a parallel goal.
+Rejected: a StateContext god-object carrying all step inputs/outputs.
+That is a blackboard wearing a state-machine costume — every step reads
+and writes a shared mutable bag, zero encapsulation. Data flows via
+function args/returns and narrow result objects instead.
+
+Reified FSM would only be justified by (a) cross-process suspension
+persistence, (b) transition replay, or (c) highly-branched control flow.
+Chimera needs none: single-process, near-linear flow (only branch is
+tool-call vs no-tool), sessions recoverable from jsonl on restart.
+
+Time, not data, is the async concern. AWAITING_TASK is a *temporal*
+state (waiting on an event over time), modeled by `await`-ing a
+TaskService completion event — coroutine-native suspension, event wakeup,
+free event loop during the wait. No busy-poll, no message queue.
 
 ## Sprint Sequence
 
 | Sprint | One-line goal | Status |
 |---|---|---|
 | A.0 | Audit current theater loop, identify implicit states, blocking awaits, data flows, AWAITING_TASK gap | Sealed |
-| A.1 | Identity DDD (Layer 2): TurnId + explicit Conversation/Turn context objects; threaded through ChatMessage, ExecutedToolResult, etc. Schema-only, no executor change | Pending |
-| A.2 | Process DDD (Layer 3): State enum, StateContext, StateTransition objects, StateMachine class. Schema + scaffolding only, not yet wired to agent.py | Pending |
-| A.3 | FSM executor refactor: replace `_run_theater_stream` while-loop with StateMachine-driven flow; cross-state locals (`wash_context`, `probe_for_cmd`) move into StateContext. PURE REFACTOR — byte-identical observable behavior | Pending |
-| A.4 | AWAITING_TASK state: long_running tools suspend; resume via TaskService event subscription; real result re-enters the FSM | Pending |
-| A.5 | SSE protocol upgrade: state-transition events streamed mid-turn (frontend learns when agent is awaiting) | Pending |
-| A.6 | Lifecycle integrity: agent processes next user message correctly after a long-task await completes | Pending |
+| A.1 | Identity DDD (Layer 2): TurnId + explicit Conversation/Turn context objects; threaded through ChatMessage, ExecutedToolResult, etc. Schema-only, no executor change | Sealed |
+| A.2 | Phase labels + narrow result objects + TerminalReason enum. NO StateContext god-object, NO StateMachine class, NO transition table. Thin introspection layer only | Sealed |
+| A.3 | Coroutine refactor: decompose _run_theater_stream into async step methods (route/execute/wash/render/synthesize); data via args/returns; self._phase label updated per step. PURE REFACTOR — byte-identical behavior | Sealed |
+| A.4 | AWAITING_TASK via coroutine suspension: implement TaskService.await_completion(task_id); long_running tools `await` it; real result re-enters the flow. Event-driven by construction (not polling) | Sealed |
+| A.5 | SSE protocol upgrade: state-transition events streamed mid-turn (frontend learns when agent is awaiting) | Sealed |
+| A.6 | Lifecycle integrity: agent processes next user message correctly after a long-task await completes | Sealed |
 
 Dependencies: A.0 → A.1 (identity schema) → A.2 (process schema) →
 A.3 (FSM wired, pure refactor) → A.4 (async on FSM) → A.5 (SSE reflects states) →
@@ -79,16 +92,18 @@ A.6 (lifecycle integrity).
 - ❌ Identity threading (A.1) does NOT change message wire format unless
   necessary — TurnId can live as Pydantic field with default factory; old
   clients ignoring the field stay compatible
+- ❌ NO StateContext / god-object carrying multi-step data — args/returns only
+- ❌ NO explicit transition table / StateMachine class — coroutine flow IS the machine
+- ❌ NO message queue inside the agent for step-to-step data — direct returns
+- ❌ Phase label (self._phase) is for observation only — never drives control flow
 
 ## Hard Sealing Conditions
 
-1. (Identity) Every `ChatMessage`, `ExecutedToolResult`, `TaskEvent`, and SSE
-   frame in a turn carries the same `TurnId`; `TurnId` derivable from any
-   single artifact in the turn.
-2. (Process schema) `State` is an enum without failure variants; every
-   `StateTransition` has either `next_state` or `terminal_reason`, never both.
-3. (Pure refactor — A.3) Identical conversation produces identical SSE byte
-   stream before/after A.3 (regression suite).
+1. (Phase introspection) self._phase reflects the current async step at all
+   times; queryable for SSE/logging. Phase enum has no failure variants.
+2. (Pure refactor) Identical conversation produces byte-identical SSE stream
+   before/after A.3. Step methods communicate only via args/returns — grep
+   confirms no shared mutable StateContext.
 4. (Await fix — the E1 root) "爬取论文" → REAL papers in final reply,
    verified by paper IDs cross-referenced with `audit_log.csv`.
 5. (Lifecycle) After a long task completes and reply streams, next user
@@ -99,44 +114,38 @@ A.6 (lifecycle integrity).
 
 ## Design Decisions
 
-- **Hand-rolled FSM, asyncio primitives only (no framework)**: consistent
-  with Chimera's anti-framework philosophy. The user has built async
-  pipelines before (graduation project: four stateless daemons consuming
-  global frame DTOs, UUID aggregation, poison-pill boundary broadcast).
-  This is hand-rollable in ~2 days with Claude Code long-running + oversight.
+- **Coroutine-native, not reified FSM**: async/await IS the state machine.
+  Steps are async methods; suspension points are `await`s; phase is a thin
+  label (self._phase) for introspection/SSE/logging, not a transition table.
+  Justified by: single-process, near-linear flow, jsonl-recoverable sessions.
 
-- **Three-layer DDD, not two**: Layer 1 (data) is done — `PlannedToolCall`,
-  `ExecutedToolResult`, `ChatMessage` are typed. Layer 2 (identities:
-  `TurnId`, explicit Conversation/Turn context) and Layer 3 (process: `State`
-  enum, `StateContext`, `StateTransition`, `StateMachine`) are Phase IV.A's
-  deliverable. Async is a Layer 3 consequence, not a parallel objective.
+- **Narrow result objects, not a god context**: each step takes what it
+  needs (args) and returns what it produces (a narrow result like
+  RouteResult{probe_response, planned_calls, wash_context, probe_for_cmd}).
+  No shared StateContext bag. wash_context flows as an explicit return field,
+  not a cross-state closure local.
+
+- **self.messages stays agent-level, not in any per-turn context**: messages
+  are cross-turn accumulated state; per-turn data lives in step results.
+
+- **Pure refactor before async feature (A.3 vs A.4)**: A.3 converts the
+  while-loop to a coroutine flow with identical behavior. A.4 adds the
+  await-suspension capability. Two separate HSCs isolate "refactor broke
+  nothing" from "suspension works."
+
+- **Suspension state is NOT serializable (accepted limitation)**: if Oligo
+  crashes mid-await, the suspended turn is lost — user re-triggers. Acceptable
+  for single-user local single-process. Persistent suspension = Phase VI+,
+  requires explicit friction signal.
+
+- **Failure is transition terminal, not state**: TerminalReason enum
+  (COMPLETED / TURN_EXHAUSTED / CLIENT_GONE / LLM_TIMEOUT / TASK_FAILED) is
+  returned by the turn coroutine; never a Phase label member.
 
 - **Identity-first (A.1), then process schema (A.2)**: identities are the
   stable contract that state context objects bind to. `TurnId` must be
   threaded before state contexts reference it. DDD discipline: identities
   before aggregates.
-
-- **Failure is transition, not state**: `TURN_EXHAUSTED` in the audit is a
-  control-flow terminator, not a state. The `State` enum stays orthogonal
-  to failure modes. Each `StateTransition` carries either `next_state` or
-  `terminal_reason`, never both. Failure modes are enumerated as
-  `TerminalReason` values, not `State` variants.
-
-- **PRE_TURN_SETUP and PROBE_DRAFT_BACKFILL are real states**: the audit
-  found them as "micro-states" but they have true invariants — system slot
-  replacement, and the draft-vs-pass decision respectively. Squashing them
-  into ROUTING hides decisions that belong in named `StateContext` variants.
-
-- **wash_context and probe_for_cmd move into StateContext**: cross-state
-  closure locals are an FSM anti-pattern. `wash_context` (captured at
-  ROUTING exit, consumed in WASHING) and `probe_for_cmd` (captured during
-  EXECUTING, consumed in RENDERING_TOOL_RESULTS) become typed fields on
-  the appropriate `StateContext` variant. No implicit closure threading.
-
-- **Pure refactor before feature (A.3 vs A.4)**: A.3 converts the sync
-  while-loop to an FSM with byte-identical observable behavior. Only A.4+
-  adds AWAITING_TASK / event capabilities. This isolates "did the refactor
-  break anything" from "does the new feature work."
 
 - **State schema is user-defined, not auto-derived**: A.0 audit reports
   observed states and transitions but does NOT propose a canonical schema.
