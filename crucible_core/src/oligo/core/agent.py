@@ -18,15 +18,18 @@ from typing import Any, AsyncGenerator, Literal
 
 from collections.abc import Awaitable, Callable
 
-from src.crucible.core.schemas import (
+from src.oligo.core.schemas import (
     Artifact,
     ChatMessage,
+    ConversationContext,
     ExecutedToolResult,
     OligoAgentConfig,
     PlannedToolCall,
     PromptStage,
     ToolCallStatus,
     ToolOutput,
+    TurnContext,
+    TurnId,
 )
 from src.crucible.ports.llm.base import LLMClient
 from src.crucible.services.metrics_service import MetricsService
@@ -392,6 +395,7 @@ class ChimeraAgent:
         persona: str | None = None,
         authors_note: str | None = None,
         metrics_service: MetricsService | None = None,
+        session_id: str | None = None,
     ) -> None:
         """
         Args:
@@ -422,6 +426,12 @@ class ChimeraAgent:
         self.max_turns = max_turns
         self._metrics_service = metrics_service
         self._current_turn: int = 0
+        # A.1: conversation-level identity (default_factory generates UUID when session_id absent)
+        self._conversation_ctx = (
+            ConversationContext(session_id=session_id)
+            if session_id is not None
+            else ConversationContext()
+        )
 
         # FC.2a: per-request artifact accumulator. Populated after each turn's wash;
         # emitted once as `bb-message-artifacts` before the success-path return.
@@ -1151,6 +1161,11 @@ class ChimeraAgent:
         while turn < self.max_turns:
             turn += 1
             self._current_turn = turn
+            # A.1: turn-level identity (read-only; no executor change)
+            _turn_ctx = TurnContext(
+                turn_id=TurnId.create(self._conversation_ctx.session_id, turn),
+                turn_number=turn,
+            )
             logger.debug(f"[Oligo] Theater turn {turn}/{self.max_turns}")
 
             if turn > 1:
@@ -1316,7 +1331,7 @@ class ChimeraAgent:
                         f"{cmd_only[:8000]}\n...[truncated {_cmd_len - 8000} chars]"
                     )
                 self.messages.append(
-                    ChatMessage(role="assistant", content=cmd_only)
+                    ChatMessage(role="assistant", content=cmd_only, turn_id=str(_turn_ctx.turn_id))
                 )
 
                 logger.info(
@@ -1328,7 +1343,7 @@ class ChimeraAgent:
                     executed_results
                 )
                 self.messages.append(
-                    ChatMessage(role="user", content=tool_result_message)
+                    ChatMessage(role="user", content=tool_result_message, turn_id=str(_turn_ctx.turn_id))
                 )
 
                 continue
@@ -1339,7 +1354,7 @@ class ChimeraAgent:
             _probe_trivial = _is_router_pass_or_trivial(backfill_draft)
             if not _probe_trivial:
                 self.messages.append(
-                    ChatMessage(role="assistant", content=backfill_draft)
+                    ChatMessage(role="assistant", content=backfill_draft, turn_id=str(_turn_ctx.turn_id))
                 )
                 logger.info(
                     "[Router] probe_draft_backfill chars=%s (raw_len=%s)",

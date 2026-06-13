@@ -2,6 +2,22 @@
 
 from __future__ import annotations
 
+# Re-exports for backward-compat: Oligo domain models live in oligo.core.schemas now.
+# Downstream consumers that import from crucible.core.schemas continue to work.
+from src.oligo.core.schemas import (  # noqa: F401
+    AgentInvokeRequest,
+    Artifact,
+    ChatMessage,
+    ExecutedToolResult,
+    OligoAgentConfig,
+    PlannedToolCall,
+    PromptComponent,
+    PromptRenderer,
+    PromptStage,
+    ToolCallStatus,
+    ToolOutput,
+)
+
 from enum import Enum
 from pathlib import Path
 from typing import Any, Literal
@@ -278,23 +294,7 @@ class DeepReadAtlas(BaseModel):
 
 # --- Oligo ---
 
-
-class ChatMessage(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    role: Literal["system", "user", "assistant", "tool"] = Field(
-        ..., description="The author of this message."
-    )
-    content: str = Field(..., description="The textual content of the message.")
-    tool_call_id: str | None = Field(
-        default=None,
-        description="Reserved for OpenAI Function Calling (tool result messages).",
-    )
-    name: str | None = Field(
-        default=None,
-        description="Reserved for OpenAI Function Calling (tool name).",
-    )
-
+# (ChatMessage migrated to oligo.core.schemas — re-exported above)
 
 class SkillDefinition(BaseModel):
     """`~/.chimera/skills/{skill_id}.json` 的纯净定义（不含使用统计）。
@@ -318,232 +318,13 @@ class SkillDefinition(BaseModel):
     last_updated: str | None = None
 
 
-class AgentInvokeRequest(BaseModel):
-    """Agent 调用请求体（与 Astrocyte ``OligoAgentRequest`` JSON 严格同构）。
-
-    **JSON 顶层键**（snake_case，与 Pydantic 字段名一致；与 ``llm_client.rs`` 中
-    ``OligoAgentRequest`` 的 serde 默认字段名一一对应）::
-
-        api_key, base_url, model_name, persona_id?, system_core,
-        skill_override?, skill_id?, allowed_tools?, persona?, authors_note?,
-        temperature?, messages
-
-    可选字段在 Rust 侧为 ``None`` 时使用 ``skip_serializing_if`` **省略键**；
-    FastAPI 解析时等价于 Python 侧 ``None``。``messages`` 元素为 ``ChatMessage``：
-    最少包含 ``role``、``content``；未传的 ``tool_call_id`` / ``name`` 视为 ``null``。
-
-    Prompt Injection Hierarchy (L1 > L2 > L3):
-    - L1 (System Core): Router/Skill system prompts (highest priority)
-    - L2 (Persona): User-selected persona (e.g., BB's sarcastic style)
-    - L3 (Author's Note): Ephemeral, single-session instruction (lowest priority)
-    """
-
-    model_config = ConfigDict(extra="forbid")
-
-    api_key: str = Field(
-        ...,
-        description="LLM API key from gateway (may be empty if server defaults apply).",
-    )
-    base_url: str = Field(..., description="Chat/completions API base URL from gateway.")
-    model_name: str = Field(..., description="Model id from gateway.")
-    temperature: float | None = Field(
-        default=None,
-        ge=0.0,
-        le=2.0,
-        description="Temperature for this Oligo request. If None, use ChimeraConfig llm.working.temperature.",
-    )
-    persona_id: str | None = Field(
-        default=None,
-        description="Optional persona id for logging only; not used for routing decisions.",
-    )
-    system_core: str = Field(
-        ...,
-        description=(
-            "L1: Core system baseline from the gateway (e.g. active persona `system_prompt` only). "
-            "Do not embed Author's Note or persona override here; use `persona` / `authors_note`."
-        ),
-    )
-    skill_override: str | None = Field(default=None)
-    skill_id: str | None = Field(
-        default=None,
-        description=(
-            "Active skill file stem (~/.chimera/skills/{skill_id}.json)；"
-            "统计写入 ~/.chimera/skill_stats.json，与 skill_override 正交。"
-        ),
-    )
-    allowed_tools: list[str] | None = Field(
-        default=None,
-        description="If set, only these tool names may execute in the router/tool loop; None means no restriction.",
-    )
-    messages: list[ChatMessage] = Field(
-        ...,
-        description="Clean user/assistant transcript and current turn (no gateway-prefixed system).",
-    )
-    persona: str | None = Field(
-        None,
-        description="L2: Persona override. Injected in Final Stream stage as [PERSONA OVERRIDE].",
-    )
-    authors_note: str | None = Field(
-        None,
-        description="L3: Ephemeral instruction. Injected after all system prompts as [AUTHOR'S NOTE].",
-    )
+# (AgentInvokeRequest migrated to oligo.core.schemas — re-exported above)
 
 
 # --- Oligo Tool Execution ---
 
-
-class ToolCallStatus(str, Enum):
-    """Discrete states for permission checks and execution outcomes of one tool call."""
-
-    ALLOWED = "ALLOWED"
-    DENIED = "DENIED"
-    SUCCESS = "SUCCESS"
-    ERROR = "ERROR"
-    TIMEOUT = "TIMEOUT"
-
-
-class PlannedToolCall(BaseModel):
-    """Parsed tool invocation (XML / CMD) with optional allowlist gate and structured args."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    id: str = Field(
-        ...,
-        description="Short unique id per invocation (e.g. UUID fragment) for logs and UI correlation.",
-    )
-    tool_name: str = Field(..., description="Registry tool name from the CMD tag.")
-    raw_args: str = Field(
-        ...,
-        description="Literal text inside the CMD parentheses from the model output.",
-    )
-    args: dict[str, Any] = Field(
-        ...,
-        description="JSON object parsed from raw_args (same semantics as agent-side parsing).",
-    )
-    allowed: bool = Field(
-        ...,
-        description="True if policy allows execution for this tool name in the current context.",
-    )
-    deny_reason: str | None = Field(
-        default=None,
-        description="Human-readable reason when allowed is False; None when allowed.",
-    )
-    repairs_applied: list[str] = Field(
-        default_factory=list,
-        description="Conservative format-only repairs applied to raw_args before JSON parse (TP.3).",
-    )
-
-
-class Artifact(BaseModel):
-    """A structured pointer to a side-channel resource produced by a tool run.
-
-    Artifacts ride alongside the LLM-facing text but are NEVER folded into the
-    prompt — they exist for the UI / persistence layer (FC.2 / FC.3 chip path).
-    """
-
-    model_config = ConfigDict(extra="forbid")
-
-    kind: str = Field(
-        ...,
-        description="Artifact category, e.g. 'vault_note', 'web_page'. UI selects icon by kind.",
-    )
-    path: str = Field(
-        ...,
-        description="Resource locator (vault-relative path or URL). FC.3 validates containment for vault_note.",
-    )
-    metadata: dict[str, Any] | None = Field(
-        default=None,
-        description="Optional free-form metadata (title, snippet, score). Not used by the LLM.",
-    )
-
-
-class ToolOutput(BaseModel):
-    """Opt-in structured tool return.
-
-    A tool may return a ``str`` (legacy, unchanged) OR a ``ToolOutput``.
-    ``text`` participates in wash exactly like a legacy ``str`` return, subject
-    to ``OligoAgentConfig.bypass_wash_tools`` / ``force_wash_tools``.
-    ``artifacts`` are carried separately and never enter the LLM-facing render.
-    """
-
-    model_config = ConfigDict(extra="forbid")
-
-    text: str = Field(
-        ...,
-        description="LLM-facing text. Wash policy applies as if this were a legacy str return.",
-    )
-    artifacts: list[Artifact] | None = Field(
-        default=None,
-        description="Optional side-channel pointers; consumed by FC.2 aggregation, never by the LLM.",
-    )
-
-
-class ExecutedToolResult(BaseModel):
-    """Immutable record of one tool run: inputs, status, optional raw/wash text, timing."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    call_id: str = Field(..., description="Matches PlannedToolCall.id for this execution.")
-    tool_name: str = Field(..., description="Tool that was invoked.")
-    args: dict[str, Any] = Field(
-        ...,
-        description="Structured arguments used for execution (copy of or canonical parse).",
-    )
-    status: ToolCallStatus = Field(..., description="Permission or runtime outcome.")
-    raw_result: str | None = Field(
-        default=None,
-        description="Unwashed tool output string when execution ran.",
-    )
-    washed_result: str | None = Field(
-        default=None,
-        description="LLM-compressed or post-processed text for downstream prompts.",
-    )
-    error_message: str | None = Field(
-        default=None,
-        description="Error or timeout message when status is ERROR or TIMEOUT.",
-    )
-    elapsed_ms: int | None = Field(
-        default=None,
-        description="Wall time for the execute step in milliseconds, if measured.",
-    )
-    artifacts: list[Artifact] | None = Field(
-        default=None,
-        description="Side-channel pointers produced by the tool (FC.1). Never folded into LLM payload.",
-    )
-
-
-class OligoAgentConfig(BaseModel):
-    """Tunable tool execution deadlines and wash routing policy for ChimeraAgent."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    tool_execution_deadline_seconds: float = Field(
-        default=45.0,
-        ge=1.0,
-        le=600.0,
-        description="Per-tool asyncio.wait_for ceiling for registry/vault calls.",
-    )
-    wash_min_chars: int = Field(
-        default=1200,
-        ge=0,
-        description="Minimum raw output length before FORCE wash tools may invoke LLM wash.",
-    )
-    bypass_wash_tools: set[str] = Field(
-        default_factory=lambda: {
-            "search_vault_attribute",
-            "metadata_lookup",
-            "planner_json",
-        },
-        description="Tool names that skip LLM wash; copy raw into washed_result.",
-    )
-    force_wash_tools: set[str] = Field(
-        default_factory=lambda: {
-            "search_vault",
-            "web_search",
-            "read_markdown",
-        },
-        description="Tool names that may invoke LLM wash when output is long enough.",
-    )
+# (ToolCallStatus, PlannedToolCall, Artifact, ToolOutput, ExecutedToolResult,
+#  OligoAgentConfig migrated to oligo.core.schemas — re-exported above)
 
 
 # --- Batch workflow ---
@@ -573,51 +354,7 @@ class BatchFilterStats(BaseModel):
 
 # --- Oligo PromptComposer ---
 
-
-class PromptStage(str, Enum):
-    """Prompt 注入的目标阶段"""
-
-    ROUTER = "router"  # Router 探针阶段的 system
-    FINAL = "final"  # Final 推流阶段的 system
-    BOTH = "both"  # 两个阶段都注入
-    MESSAGE_INJECTION = "message_injection"  # 注入到 messages 而非 system
-
-
-PromptRenderer = Literal["text", "xml_structured"]
-
-
-class PromptComponent(BaseModel):
-    """单个 Prompt 片段的元数据"""
-
-    model_config = ConfigDict(extra="forbid")
-
-    id: str = Field(description="唯一标识, 如 'router_core', 'skill_directive'")
-    stage: PromptStage
-    priority: int = Field(
-        description="数字越大越靠前(更显眼). 100=核心规则, 50=任务约束, 10=guardrail"
-    )
-    cacheable: bool = Field(
-        default=True,
-        description="是否属于 stable prefix. 时间戳/会话 ID 等动态内容应为 False",
-    )
-    renderer: PromptRenderer = Field(
-        default="text",
-        description="text: template 为 str，经 str.format(context)；xml_structured: template 为 dict，经 ElementTree 序列化注入（仅 prompt，不用于解析 LLM 输出）。",
-    )
-    template: str | dict[str, Any] = Field(
-        description="text 模式为含占位符的字符串；xml_structured 模式为可嵌套的 dict（由 PromptComposer 序列化为 XML）。",
-    )
-
-    @model_validator(mode="after")
-    def _renderer_matches_template_kind(self) -> PromptComponent:
-        if self.renderer == "xml_structured":
-            if not isinstance(self.template, dict):
-                raise ValueError(
-                    "renderer 'xml_structured' requires template to be a dict[str, Any]"
-                )
-        elif not isinstance(self.template, str):
-            raise ValueError("renderer 'text' requires template to be a str")
-        return self
+# (PromptStage, PromptRenderer, PromptComponent migrated to oligo.core.schemas — re-exported above)
 
 
 class ToolSpec(BaseModel):
@@ -676,3 +413,8 @@ class TaskEvent(BaseModel):
     message: str | None = None
     error: str | None = None
     timestamp_ms: int = Field(description="后端时钟的 epoch ms, 前端可用此校准。")
+    # A.1 Identity threading
+    turn_id: str | None = Field(
+        default=None,
+        description="TurnId str for the agent turn that triggered this task event.",
+    )
