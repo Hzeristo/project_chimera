@@ -27,7 +27,7 @@ from pydantic_settings.sources import (
 )
 
 from src.crucible.core.platform import get_chimera_root, get_config_path, get_project_root
-from src.crucible.core.schemas import OligoAgentConfig
+from src.oligo.core.schemas import OligoAgentConfig
 
 logger = logging.getLogger(__name__)
 

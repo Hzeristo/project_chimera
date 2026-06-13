@@ -12,7 +12,8 @@ from xml.etree import ElementTree as ET
 
 from jinja2 import Environment, FileSystemLoader, StrictUndefined
 
-from src.crucible.core.schemas import PromptComponent, PromptStage, ToolSpec
+from src.crucible.core.schemas import ToolSpec
+from src.oligo.core.schemas import PromptComponent, PromptStage
 from src.oligo.tools.registry import get_tool_registry
 
 _global_composer: PromptComposer | None = None

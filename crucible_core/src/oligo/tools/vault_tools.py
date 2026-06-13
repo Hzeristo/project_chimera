@@ -5,7 +5,7 @@ from __future__ import annotations
 
 from typing import Any, Protocol
 
-from src.crucible.core.schemas import Artifact, ToolOutput
+from src.oligo.core.schemas import Artifact, ToolOutput
 
 class _VaultToolPort(Protocol):
     """Structural type for vault search backends (``VaultReadAdapter`` or test doubles)."""

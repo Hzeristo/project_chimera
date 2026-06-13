@@ -5,7 +5,8 @@ from __future__ import annotations
 
 from collections.abc import Awaitable, Callable, Collection
 
-from src.crucible.core.schemas import PlannedToolCall, ToolOutput, ToolSpec
+from src.crucible.core.schemas import ToolSpec
+from src.oligo.core.schemas import PlannedToolCall, ToolOutput
 from src.oligo.tools.agent_tools import fork_agent
 from src.oligo.tools.miner_tools import (
     arxiv_miner,
