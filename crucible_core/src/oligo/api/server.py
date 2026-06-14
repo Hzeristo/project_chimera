@@ -17,7 +17,7 @@ from src.crucible.bootstrap import (
     build_openai_client_from_params,
 )
 from src.crucible.core.config import get_config
-from src.crucible.core.schemas import AgentInvokeRequest
+from src.oligo.core.schemas import AgentInvokeRequest
 from src.crucible.core.platform import get_chimera_root
 from src.crucible.services.metrics_service import MetricsService
 from src.crucible.services.task_service import TaskService, set_task_service
@@ -121,6 +121,7 @@ def create_app() -> FastAPI:
             persona=body.persona,
             authors_note=body.authors_note,
             metrics_service=request.app.state.metrics,
+            session_id=body.session_id,
         )
 
         metrics: MetricsService = request.app.state.metrics

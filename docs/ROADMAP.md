@@ -2,8 +2,8 @@
 
 Personal research OS for one user. Not a framework. Not SaaS.
 
-> **Last sealed:** Phase III.F — Path Canonicalization — 2026-06-12
-> **Active:** Phase IV — Exocortex & Memory
+> **Last sealed:** Phase IV.A — Async Agent Core — 2026-06-14
+> **Active:** Phase V — Exocortex & Memory (queued)
 
 ---
 
@@ -132,9 +132,35 @@ Personal research OS for one user. Not a framework. Not SaaS.
 
 ---
 
+### Phase IV.A — Async Agent Core ✅ Sealed 2026-06-14
+
+**Driving frictions resolved:** friction-260611 E1 — long-running task → Final fabricates. Root fix: AWAITING_TASK coroutine suspension; agent awaits real TaskService completion event before synthesizing.
+
+| Sprint | One-line goal | Status |
+|---|---|---|
+| A.0 | Audit: theater loop control flow, implicit states, TaskService event surface, SSE protocol, sync assumptions baked in | Sealed |
+| A.1 | Identity DDD (Layer 2): TurnId + explicit Conversation/Turn context objects | Sealed |
+| A.2 | Phase labels + narrow result objects (RouteResult, ExecuteResult) + TerminalReason enum | Sealed |
+| A.3 | Coroutine refactor: decompose `_run_theater_stream` into 5 async step methods. PURE REFACTOR — byte-identical SSE | Sealed |
+| A.4 | AWAITING_TASK: long_running tools suspend via `await svc.await_completion()`; real result re-enters flow | Sealed |
+| A.5 | SSE protocol: `bb-phase-transition` events for all 6 phases; backward-compat | Sealed |
+| A.6 | Lifecycle integrity: post-await history correct, no subscription leak | Sealed |
+
+**Commits:** `02ffd48` (A.1), `0490314` (A.0 state), `e561581` (A.3–A.6), `4109c78` (hotfix)
+**Accepted partials:** `ACCEPTED_PARTIALS.md` IV.A section
+**Sealed:** 2026-06-14
+
+---
+
+## Active Phase
+
+*(none — next: Phase V audit)*
+
+---
+
 ## Queued
 
-### Phase IV — Exocortex & Memory
+### Phase V — Exocortex & Memory
 - K/T/I/D node ontology (Knowledge / Thought / Insight / Decision)
 - PaperMiner → Knowledge Node automation (via Lens output → vault note write)
 - Shallow PPR retrieval with pruning + fanout activation (star-expansion for hyperedges, no theoretical purity tax)
@@ -142,7 +168,7 @@ Personal research OS for one user. Not a framework. Not SaaS.
 - Gravedigger (OpenReview-Miner with reuse of `FilterService` + `VaultNoteWriter` + `PaperArchiveAdapter`)
 - Trajectory reasoning emerges from PPR-tool multi-turn ReAct (no separate infrastructure)
 
-### Phase V — Horizon (speculative)
+### Phase IV — Horizon (speculative)
 - Inspiration mechanics (nightly random walk over graph)
 - External orchestration (Claude Code as long-task tool, MLLM image gen for slides)
 - Self-evolving agent (APO via human-in-the-loop, not full RLAIF)

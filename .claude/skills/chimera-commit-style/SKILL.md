@@ -1,6 +1,11 @@
 ---
 name: chimera-commit-style
 description: Git commit message style for Chimera. Activate when drafting commit messages or discussing git hygiene. Three-tier message length based on change significance. Personal project conventions, not team OSS conventions.
+allowed-tools:
+  - Read
+  - Grep
+  - Glob
+  - Edit
 ---
 
 # Chimera Commit Style

@@ -5,7 +5,8 @@ from __future__ import annotations
 
 from collections.abc import Awaitable, Callable, Collection
 
-from src.crucible.core.schemas import PlannedToolCall, ToolOutput, ToolSpec
+from src.crucible.core.schemas import ToolSpec
+from src.oligo.core.schemas import PlannedToolCall, ToolOutput
 from src.oligo.tools.agent_tools import fork_agent
 from src.oligo.tools.miner_tools import (
     arxiv_miner,
@@ -62,6 +63,10 @@ class ToolRegistry:
     def is_concurrency_safe(self, name: str) -> bool:
         spec = self._specs.get(name)
         return spec.concurrency_safe if spec else False
+
+    def is_long_running(self, name: str) -> bool:
+        spec = self._specs.get(name)
+        return spec.long_running if spec else False
 
 
 def partition_tool_calls(

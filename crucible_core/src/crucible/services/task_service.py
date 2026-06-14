@@ -66,6 +66,7 @@ class TaskService:
         self.tasks_dir.mkdir(parents=True, exist_ok=True)
         self._event_queue: asyncio.Queue[TaskEvent] = asyncio.Queue(maxsize=1000)
         self._subscribers: set[asyncio.Queue[TaskEvent]] = set()
+        self._running_tasks: dict[str, asyncio.Task] = {}
 
     def _task_path(self, task_id: str) -> Path:
         return self.tasks_dir / f"{task_id}.json"
@@ -298,6 +299,57 @@ class TaskService:
             task.progress_message = message
         self._save_task(task)
 
+    def get_task(self, task_id: str) -> "Task | None":
+        """Return persisted task or None if not found."""
+        try:
+            return self._load_task(task_id)
+        except FileNotFoundError:
+            return None
+
+    def _event_from_task(self, task: "Task") -> TaskEvent:
+        etype = {
+            TaskStatus.COMPLETED: TaskEventType.COMPLETED,
+            TaskStatus.FAILED: TaskEventType.FAILED,
+            TaskStatus.CANCELLED: TaskEventType.CANCELLED,
+        }[task.status]
+        return TaskEvent(
+            event_type=etype,
+            task_id=task.id,
+            task_type=task.type,
+            stage_id=None,
+            stage_label=None,
+            overall_progress=task.progress,
+            message=task.result,
+            error=task.error,
+            timestamp_ms=self._now_ms(),
+        )
+
+    async def await_completion(self, task_id: str, timeout_s: float = 600.0) -> TaskEvent:
+        """Event-driven wait. Double-checks terminal status around subscribe
+        to eliminate the subscribe-after-emit race."""
+        _terminal = (TaskStatus.COMPLETED, TaskStatus.FAILED, TaskStatus.CANCELLED)
+        task = self.get_task(task_id)
+        if task and task.status in _terminal:
+            return self._event_from_task(task)
+
+        q = self.subscribe()
+        try:
+            task = self.get_task(task_id)
+            if task and task.status in _terminal:
+                return self._event_from_task(task)
+
+            deadline = asyncio.get_event_loop().time() + timeout_s
+            _terminal_event = (TaskEventType.COMPLETED, TaskEventType.FAILED, TaskEventType.CANCELLED)
+            while True:
+                remaining = deadline - asyncio.get_event_loop().time()
+                if remaining <= 0:
+                    raise asyncio.TimeoutError(f"await_completion timed out for {task_id}")
+                event = await asyncio.wait_for(q.get(), timeout=remaining)
+                if event.task_id == task_id and event.event_type in _terminal_event:
+                    return event
+        finally:
+            self.unsubscribe(q)
+
     async def run_task(self, task_id: str, work: Awaitable[str]) -> None:
         """Run async work, persist status/result/error."""
         task = self._load_task(task_id)
@@ -305,12 +357,18 @@ class TaskService:
         task.progress = 0.0
         task.progress_message = "Starting..."
         self._save_task(task)
-        try:
-            result = await work
-        except Exception as e:
-            await self.emit_failed(task_id, str(e))
-        else:
-            await self.emit_completed(task_id, summary=result)
+
+        async def _run() -> None:
+            try:
+                result = await work
+            except Exception as e:
+                await self.emit_failed(task_id, str(e))
+            else:
+                await self.emit_completed(task_id, summary=result)
+
+        t = asyncio.create_task(_run())
+        self._running_tasks[task_id] = t
+        t.add_done_callback(lambda _t: self._running_tasks.pop(task_id, None))
 
     async def cancel_task(
         self,

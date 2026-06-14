@@ -220,7 +220,7 @@ class TextSanitizer:
         if not messages:
             return messages
 
-        from src.crucible.core.schemas import ChatMessage
+        from src.oligo.core.schemas import ChatMessage
 
         is_chat = all(isinstance(m, ChatMessage) for m in messages)
         raw: list[dict[str, Any]] = [
