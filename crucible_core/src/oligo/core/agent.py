@@ -1214,15 +1214,12 @@ class ChimeraAgent:
         has_long_running = False
         for er in executed_results:
             raw = er.raw_result or ""
-            if (
-                registry.is_long_running(er.tool_name)
-                and raw.startswith("[Task started]")
-            ):
+            if registry.is_long_running(er.tool_name):
                 m = re.search(r'[0-9a-f]{8}', raw)
-                task_id = m.group(0) if m else None
-                er = er.model_copy(update={"task_id": task_id})
-                has_long_running = True
-            patched.append(er)
+                if m:
+                    er = er.model_copy(update={"task_id": m.group(0)})
+                    has_long_running = True
+                    patched.append(er)
         return ExecuteResult(executed_results=patched, has_long_running=has_long_running)
 
     async def _step_wash(
