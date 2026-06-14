@@ -37,3 +37,9 @@ See `docs/ARCHITECTURE/`.
 - Standard cargo workspace, no special config
 - Lockfile: `astrocyte/Cargo.lock` is authoritative
 
+### Obsidian Vault
+- Path: D:\MAS\project_chimera_vault (or wherever it actually is)
+- This is a SIBLING directory, not inside the repo
+- Claude Code has read access for auditing; write access only for
+  staging area operations (Phase V.A.3+)
+
