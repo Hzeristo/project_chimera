@@ -1,6 +1,6 @@
 # Phase IV.A — Async Agent Core
 
-**Status:** Planned (start after III.E/III.F sealed + hybrid week friction)
+**Status:** Sealed 2026-06-14
 **Sealed predecessor:** III.F
 **Driving frictions:**
 - friction-260611 / 260613 E1 (long-running task → Final fabricates,

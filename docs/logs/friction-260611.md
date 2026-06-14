@@ -1,4 +1,4 @@
-### Entry 1 [Status: OPEN]
+### Entry 1 [Status: RESOLVED — Phase IV.A, commit e561581/4109c78]
 - 时间：2026.06.13
 - 想做：用chimera爬取paper
 - 实际：返回：

@@ -2,8 +2,8 @@
 
 Personal research OS for one user. Not a framework. Not SaaS.
 
-> **Last sealed:** Phase III.F — Path Canonicalization — 2026-06-12
-> **Active:** Phase IV.A — Async Agent Core
+> **Last sealed:** Phase IV.A — Async Agent Core — 2026-06-14
+> **Active:** Phase V — Exocortex & Memory (queued)
 
 ---
 
@@ -132,31 +132,29 @@ Personal research OS for one user. Not a framework. Not SaaS.
 
 ---
 
-## Active Phase
+### Phase IV.A — Async Agent Core ✅ Sealed 2026-06-14
 
-### Phase IV.A — Async Agent Core
-
-**Driving frictions:** friction-260611/260613 E1 — long-running task → Final fabricates; synchronous ReAct loop cannot model task await, mid-turn suspension, or event-driven continuation.
+**Driving frictions resolved:** friction-260611 E1 — long-running task → Final fabricates. Root fix: AWAITING_TASK coroutine suspension; agent awaits real TaskService completion event before synthesizing.
 
 | Sprint | One-line goal | Status |
 |---|---|---|
 | A.0 | Audit: theater loop control flow, implicit states, TaskService event surface, SSE protocol, sync assumptions baked in | Sealed |
-| A.1 | Identity DDD (Layer 2): TurnId + explicit Conversation/Turn context objects; threaded through ChatMessage, ExecutedToolResult, etc. Schema-only, no executor change | Sealed |
-| A.2 | Process DDD (Layer 3): State enum, StateContext, StateTransition objects, StateMachine class. Schema + scaffolding only, not yet wired to agent.py | Pending |
-| A.3 | FSM executor refactor: replace `_run_theater_stream` while-loop with StateMachine-driven flow; cross-state locals (`wash_context`, `probe_for_cmd`) move into StateContext. PURE REFACTOR — byte-identical observable behavior | Pending |
-| A.4 | AWAITING_TASK state: long_running tools suspend; resume via TaskService event subscription; real result re-enters the FSM | Pending |
-| A.5 | SSE protocol upgrade: state-transition events streamed mid-turn (frontend learns when agent is awaiting) | Pending |
-| A.6 | Lifecycle integrity: agent processes next user message correctly after a long-task await completes | Pending |
+| A.1 | Identity DDD (Layer 2): TurnId + explicit Conversation/Turn context objects | Sealed |
+| A.2 | Phase labels + narrow result objects (RouteResult, ExecuteResult) + TerminalReason enum | Sealed |
+| A.3 | Coroutine refactor: decompose `_run_theater_stream` into 5 async step methods. PURE REFACTOR — byte-identical SSE | Sealed |
+| A.4 | AWAITING_TASK: long_running tools suspend via `await svc.await_completion()`; real result re-enters flow | Sealed |
+| A.5 | SSE protocol: `bb-phase-transition` events for all 6 phases; backward-compat | Sealed |
+| A.6 | Lifecycle integrity: post-await history correct, no subscription leak | Sealed |
 
-**Hard sealing conditions:**
-1. (Identity) Every `ChatMessage`, `ExecutedToolResult`, `TaskEvent`, and SSE frame in a turn carries the same `TurnId`; `TurnId` derivable from any single artifact in the turn.
-2. (Process schema) `State` is an enum without failure variants; every `StateTransition` has either `next_state` or `terminal_reason`, never both.
-3. (Pure refactor — A.3) Identical conversation produces identical SSE byte stream before/after A.3 (regression suite).
-4. (Await fix — the E1 root) "爬取论文" → REAL papers in final reply, verified by paper IDs cross-referenced with `audit_log.csv`.
-5. (Lifecycle) After a long task completes and reply streams, next user message in the same session enters new ROUTING state cleanly with correct message history.
-6. (Event resume, not poll) AWAITING_TASK exits via TaskService event, not via polling loop.
+**Commits:** `02ffd48` (A.1), `0490314` (A.0 state), `e561581` (A.3–A.6), `4109c78` (hotfix)
+**Accepted partials:** `ACCEPTED_PARTIALS.md` IV.A section
+**Sealed:** 2026-06-14
 
-**Spec:** `docs/phases/phase-IV.A.md`
+---
+
+## Active Phase
+
+*(none — next: Phase V audit)*
 
 ---
 

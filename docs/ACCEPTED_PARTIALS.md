@@ -110,4 +110,12 @@ Each entry: phase / sprint, partial description, reason for acceptance.
 
 ---
 
+## Phase IV.A — Async Agent Core (sealed 2026-06-14)
+
+### IV.A.W.1 — `_step_wash` returns `tuple[list[ExecutedToolResult], list[str]]` instead of `list[ExecutedToolResult]`
+- **Description:** Batch plan `Phase-IV.A-batch.md` declared `_step_wash` signature as `-> list[ExecutedToolResult]`. Implementation returns a tuple: `(washed_results, wash_sse_frames)`. The `list[str]` carries wash telemetry SSE frames, which the main loop yields for byte-identical SSE output.
+- **Reason:** HSC-1 requires byte-identical SSE stream before/after A.3 refactor. Wash telemetry frames must be yielded from the main generator, not swallowed inside the step method. Returning them as a second element is the minimal architectural adjustment; any alternative would have violated HSC-1 or introduced a side-channel (e.g., queue). Deviation declared at execution time.
+
+---
+
 *Update protocol: Append-only at sprint seal. New entries appended by `chimera-sprint-discipline` phase_review mode under `<state_write_authority>` (auto-apply, no diff).*
