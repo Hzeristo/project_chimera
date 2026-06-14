@@ -1216,9 +1216,10 @@ class ChimeraAgent:
             raw = er.raw_result or ""
             if (
                 registry.is_long_running(er.tool_name)
-                and raw.startswith("Task started: ")
+                and raw.startswith("[Task started]")
             ):
-                task_id = raw.removeprefix("Task started: ").strip()
+                m = re.search(r'[0-9a-f]{8}', raw)
+                task_id = m.group(0) if m else None
                 er = er.model_copy(update={"task_id": task_id})
                 has_long_running = True
             patched.append(er)
