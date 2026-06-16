@@ -4,6 +4,7 @@
   import { listen, emit } from '@tauri-apps/api/event';
   import ActiveTaskPanel from '$lib/ActiveTaskPanel.svelte';
   import ActiveToolTelemetry from '$lib/ActiveToolTelemetry.svelte';
+  import StagingPanel from '$lib/StagingPanel.svelte';
   import { marked } from 'marked';
   import markedKatex from 'marked-katex-extension';
   import DOMPurify from 'dompurify';
@@ -1382,6 +1383,13 @@
     void refreshAvailableSkills();
   }
 
+  async function createThoughtFromMessage(msg: HistoryEntry) {
+    const title = `Thought ${msg.timestamp.slice(0, 10)}`;
+    try {
+      await invoke('create_staging_node_cmd', { nodeType: 'thought', title, body: msg.text.slice(0, 2000) });
+    } catch (e) { notifySystem(`[STAGING_ERROR] ${e}`); }
+  }
+
   async function deleteMessage(msg: HistoryEntry) {
     if (msg.isLoading) return;
     try {
@@ -1989,6 +1997,9 @@
               <button class="btn btn--icon msg-action" type="button" title="Edit" on:click={() => onAiAction('edit', msg)}>E</button>
               <button class="btn btn--icon msg-action" type="button" title="Delete" on:click={() => onAiAction('delete', msg)}>D</button>
               <button class="btn btn--icon msg-action" type="button" title="Retry" disabled={msg.sender !== 'bb' || msg.isLoading || isGenerating} on:click={() => onAiAction('retry', msg)}>R</button>
+              {#if msg.sender === 'bb' && !msg.isLoading}
+              <button class="btn btn--icon msg-action" type="button" title="Create Thought Node" on:click={() => createThoughtFromMessage(msg)}>N</button>
+              {/if}
             </div>
           {/if}
           {#if editingMessageId === msg.id}
@@ -2091,6 +2102,7 @@
         </article>
       {/each}
       </section>
+      <StagingPanel />
     </div>
 
     <div

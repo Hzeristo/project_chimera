@@ -25,6 +25,7 @@ from src.crucible.ports.vault.vault_read_adapter import VaultReadAdapter
 from src.oligo.core.agent import CLIENT_GONE_EXCEPTIONS, ChimeraAgent
 from src.oligo.tools.vault_tools import set_vault_adapter
 from src.oligo.core.sse import sse_event
+from src.oligo.api.staging_routes import router as staging_router
 
 logger = logging.getLogger(__name__)
 
@@ -74,6 +75,7 @@ def create_app() -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
+    app.include_router(staging_router)
 
     @app.exception_handler(RequestValidationError)
     async def log_validation_errors(request: Request, exc: RequestValidationError) -> JSONResponse:

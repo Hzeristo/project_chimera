@@ -1187,6 +1187,95 @@ async fn open_vault_note(
     Ok(())
 }
 
+fn no_traversal(raw: &str) -> Result<(), String> {
+    use std::path::{Component, Path};
+    if Path::new(raw).components().any(|c| c == Component::ParentDir) {
+        Err(format!("[staging] traversal rejected: {}", raw))
+    } else {
+        Ok(())
+    }
+}
+
+#[tauri::command]
+async fn list_staging_candidates(
+    state: tauri::State<'_, AstrocyteState>,
+) -> Result<serde_json::Value, String> {
+    let base_url = state.config.read().await.oligo_base_url.clone();
+    let client = reqwest::Client::builder()
+        .timeout(Duration::from_secs(5))
+        .build()
+        .map_err(|e| format!("[staging] client: {}", e))?;
+    let resp = client
+        .get(format!("{}/v1/staging/list", base_url))
+        .send()
+        .await
+        .map_err(|e| format!("[staging] list: {}", e))?;
+    resp.json().await.map_err(|e| format!("[staging] list parse: {}", e))
+}
+
+#[tauri::command]
+async fn create_staging_node_cmd(
+    node_type: String,
+    title: String,
+    body: String,
+    state: tauri::State<'_, AstrocyteState>,
+) -> Result<String, String> {
+    let base_url = state.config.read().await.oligo_base_url.clone();
+    let client = reqwest::Client::builder()
+        .timeout(Duration::from_secs(5))
+        .build()
+        .map_err(|e| format!("[staging] client: {}", e))?;
+    let resp = client
+        .post(format!("{}/v1/staging/create", base_url))
+        .json(&serde_json::json!({"type": node_type, "title": title, "body": body}))
+        .send()
+        .await
+        .map_err(|e| format!("[staging] create: {}", e))?;
+    let json: serde_json::Value = resp.json().await.map_err(|e| format!("[staging] create parse: {}", e))?;
+    Ok(json["path"].as_str().unwrap_or("").to_string())
+}
+
+#[tauri::command]
+async fn promote_staging_node(
+    staging_path: String,
+    state: tauri::State<'_, AstrocyteState>,
+) -> Result<String, String> {
+    no_traversal(&staging_path)?;
+    let base_url = state.config.read().await.oligo_base_url.clone();
+    let client = reqwest::Client::builder()
+        .timeout(Duration::from_secs(5))
+        .build()
+        .map_err(|e| format!("[staging] client: {}", e))?;
+    let resp = client
+        .post(format!("{}/v1/staging/promote", base_url))
+        .json(&serde_json::json!({"staging_path": staging_path}))
+        .send()
+        .await
+        .map_err(|e| format!("[staging] promote: {}", e))?;
+    let json: serde_json::Value = resp.json().await.map_err(|e| format!("[staging] promote parse: {}", e))?;
+    Ok(json["vault_path"].as_str().unwrap_or("").to_string())
+}
+
+#[tauri::command]
+async fn reject_staging_node(
+    staging_path: String,
+    state: tauri::State<'_, AstrocyteState>,
+) -> Result<(), String> {
+    no_traversal(&staging_path)?;
+    let base_url = state.config.read().await.oligo_base_url.clone();
+    let client = reqwest::Client::builder()
+        .timeout(Duration::from_secs(5))
+        .build()
+        .map_err(|e| format!("[staging] client: {}", e))?;
+    client
+        .post(format!("{}/v1/staging/reject", base_url))
+        .json(&serde_json::json!({"staging_path": staging_path}))
+        .send()
+        .await
+        .map_err(|e| format!("[staging] reject: {}", e))?;
+    Ok(())
+}
+
 #[tauri::command]
 async fn load_session_archive(
     session_id: String,
@@ -1605,7 +1694,11 @@ pub fn run() {
             load_session_into_main,
             new_signal_in_main,
             sublimate_scratchpad,
-            open_vault_note
+            open_vault_note,
+            list_staging_candidates,
+            create_staging_node_cmd,
+            promote_staging_node,
+            reject_staging_node
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
