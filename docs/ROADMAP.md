@@ -152,9 +152,31 @@ Personal research OS for one user. Not a framework. Not SaaS.
 
 ---
 
+### Phase V.A — Exocortex Node Ontology & Research Production Line ✅ Sealed 2026-06-16
+
+**Driving frictions resolved:** friction-260611 E1 (structured output), E3 (vault paths)
+
+| Sprint | One-line goal | Status |
+|---|---|---|
+| V.A.0 | Audit: vault structure, existing node formats, gap analysis | Sealed |
+| V.A.1 | K/T/I/D schema authority: render smoke + NODE_ONTOLOGY.md | Sealed |
+| V.A.2a | Pipeline result enrichment: real paper titles in task result text | Sealed |
+| V.A.2b | Structured artifact propagation: ToolOutput through check_task_status | Sealed |
+| V.A.3 | Staging protocol: docs/staging/ lifecycle + StagingService | Sealed |
+| V.A.4 | Astrocyte one-click node creation: Tauri commands + staging panel | Sealed |
+| V.A.5 | vault_query tool: ripgrep frontmatter query, <2s on current vault | Sealed |
+| V.A.6 | Seal: FINAL_CONTRACT + E2E smoke checklist | Sealed |
+
+**Final contract:** `docs/FINAL_CONTRACT/V.A-final-contract.md`
+**E2E smoke:** `docs/audits/V.A.6-e2e-smoke.md` (pending user execution)
+**Accepted partials:** `ACCEPTED_PARTIALS.md` V.A section
+**Sealed:** 2026-06-16
+
+---
+
 ## Active Phase
 
-*(none — next: Phase V audit)*
+*(none — V.A sealed; next: E2E smoke execution + Use Week)*
 
 ---
 

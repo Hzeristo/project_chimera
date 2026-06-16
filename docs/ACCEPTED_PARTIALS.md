@@ -118,4 +118,16 @@ Each entry: phase / sprint, partial description, reason for acceptance.
 
 ---
 
+## Phase V.A — Exocortex Node Ontology (sealed 2026-06-16)
+
+### V.A.2b.1 — Vault path re-derived at artifact build time
+- **Description:** `_collect_pipeline_artifacts` re-derives the vault note path using `sanitize_filename` rather than receiving it from `write_knowledge_node`. Coupling to naming logic is local to one helper.
+- **Reason:** User-approved clarification (2026-06-15): zero changes to pipeline data model. Thread-through would have required widening `BatchMustReadItem`.
+
+### V.A.4.1 — `svelte-check` not run at V.A.4 seal
+- **Description:** Svelte TypeScript checks not run. Precedent: FC.3b.1.
+- **Reason:** `node_modules` absent on dev host. All new `invoke` calls follow existing typed patterns.
+
+---
+
 *Update protocol: Append-only at sprint seal. New entries appended by `chimera-sprint-discipline` phase_review mode under `<state_write_authority>` (auto-apply, no diff).*
