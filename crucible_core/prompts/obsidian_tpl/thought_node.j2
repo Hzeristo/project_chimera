@@ -1,0 +1,25 @@
+---
+type: thought
+status: active
+title: "{{ title | default('', true) | replace('"', '\\"') }}"
+created: "{{ current_date | default('', true) }}"
+tags: [thought]
+graph_edges:
+  derives_from: []
+  supersedes: []
+  contradicts: []
+  dead_ends: []
+lesson: "{{ lesson | default('', true) | replace('"', '\\"') }}"
+---
+
+# {{ title | default('Untitled Thought', true) }}
+
+## Observation
+
+{{ body | default('', true) }}
+
+---
+
+## Log
+
+- {{ current_date | default('', true) }}: created

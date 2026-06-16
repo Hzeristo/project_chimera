@@ -1,23 +1,25 @@
 ---
 type: knowledge
-chimera_status: deep_read
+status: unverified
 arxiv_id: "{{ atlas.arxiv_id | replace('"', '\\"') }}"
-short_moniker: "{{ atlas.short_moniker | replace('"', '\\"') }}"
 title: "{{ (atlas.title or paper.title) | replace('"', '\\"') }}"
-tags: [deep_read, "📄/optics"]
-processed: "{{ current_date }}"
+authors: "{{ paper.authors | default('Unknown', true) | replace('"', '\\"') }}"
+year: "{{ paper.year | default('Unknown', true) | replace('"', '\\"') }}"
+short_moniker: "{{ atlas.short_moniker | replace('"', '\\"') }}"
 source_md: "{{ paper.content_path | replace('\\', '/') }}"
-architecture_types: {{ (atlas.math_arch.architecture_type if atlas.math_arch else []) | tojson }}
-baselines: {{ (atlas.eval_rigor.baselines if atlas.eval_rigor else []) | tojson }}
-datasets: {{ (atlas.eval_rigor.datasets if atlas.eval_rigor else []) | tojson }}
-metrics_used: {{ (atlas.eval_rigor.metrics_used if atlas.eval_rigor else []) | tojson }}
+processed: "{{ current_date }}"
+tags: [knowledge]
+graph_edges:
+  derives_from: []
+  supersedes: []
+  contradicts: []
 ---
 
-# 🧠 Deep Read: {{ paper.title }}
-
-> **Atlas** · Optics · `{{ paper.id }}` · {{ current_date }}
+# Deep Read: {{ paper.title }}
 
 - **PDF Asset**: [[{{ note_asset_basename }}.pdf]]
+- **Paper ID**: {{ paper.id }}
+- **Processed**: {{ current_date }}
 
 ---
 
@@ -52,7 +54,7 @@ $$
 *(No equations extracted.)*
 {% endif %}
 
-### Architecture tags
+### Architecture Tags
 
 {% if atlas.math_arch.architecture_type %}
 {% for t in atlas.math_arch.architecture_type %}
@@ -71,7 +73,7 @@ $$
 ## 2. Evaluation Rigor
 
 {% if atlas.eval_rigor %}
-### Empirical critique & ablation analysis
+### Empirical Critique & Ablation Analysis
 
 {% if atlas.eval_rigor.ablation_target and atlas.eval_rigor.ablation_target.strip() %}
 {{ atlas.eval_rigor.ablation_target }}
@@ -119,7 +121,7 @@ $$
 ## 3. Memory Physics
 
 {% if atlas.memory_physics %}
-### Memory mechanics (deep dive)
+### Memory Mechanics (Deep Dive)
 
 {% if atlas.memory_physics.mechanics_deep_dive and atlas.memory_physics.mechanics_deep_dive.strip() %}
 {{ atlas.memory_physics.mechanics_deep_dive }}
@@ -128,7 +130,7 @@ $$
 *(No deep-dive narrative extracted.)*
 {% endif %}
 
-### Forgetting & state
+### Forgetting & State
 
 {% if atlas.memory_physics.forgetting_mechanism and atlas.memory_physics.forgetting_mechanism.strip() %}
 {{ atlas.memory_physics.forgetting_mechanism }}
@@ -137,7 +139,7 @@ $$
 *(Not specified.)*
 {% endif %}
 
-### Context-window & state tricks
+### Context-Window & State Tricks
 
 {% if atlas.memory_physics.context_window_tricks and atlas.memory_physics.context_window_tricks.strip() %}
 {{ atlas.memory_physics.context_window_tricks }}

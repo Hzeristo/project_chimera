@@ -1,78 +1,48 @@
 ---
 type: knowledge
-source_type: "Paper"
+status: unverified
+arxiv_id: "{{ paper.id | replace('"', '\\"') }}"
 title: "{{ paper.title | replace('"', '\\"') }}"
-tags: [knowledge, raw_data, "📄/{{ analysis.verdict.value | lower | replace(' ', '_') }}"]
-chimera_status: unverified_by_human
-score: {{ analysis.score }}/10
-year: "{{ paper.year | default(paper.metadata.year, true) | default('TODO', true) | replace('"', '\\"') }}"
-authors: "{{ paper.authors | default(paper.metadata.authors, true) | default('TODO', true) | replace('"', '\\"') }}"
+authors: "{{ paper.authors | default('Unknown', true) | replace('"', '\\"') }}"
+year: "{{ paper.year | default('Unknown', true) | replace('"', '\\"') }}"
+score: {{ analysis.score }}
+verdict: "{{ analysis.verdict.value }}"
+short_moniker: "{{ analysis.short_moniker | replace('"', '\\"') }}"
+source_md: "{{ paper.content_path | replace('\\', '/') }}"
+processed: "{{ current_date }}"
+tags: [knowledge]
+graph_edges:
+  derives_from: []
+  supersedes: []
+  contradicts: []
 ---
 
-# 📑 {{ paper.id }} - {{ analysis.short_moniker }}
+# {{ paper.id }} — {{ analysis.short_moniker }}
 
-> **Status**: triage / deep_read / stabilized
-> **Verdict**: **{{ analysis.verdict.value }}** ({{ analysis.score }}/10) | **Processed**: {{ current_date }}
 - **PDF Asset**: [[{{ note_asset_basename }}.pdf]]
+- **Verdict**: {{ analysis.verdict.value }} ({{ analysis.score }}/10)
+- **Processed**: {{ current_date }}
 
 ---
 
-## 1. Core Paradigm Shift (核心范式转移)
-> 🤖 **[BB's Analysis]**: {{ analysis.novelty_delta }}
+## Core Contribution
 
-- **My Critique (我的修正)**: <INSTRUCTION: BB 说得对吗？有什么漏洞？>
-
-## 2. Mechanism & Implementation (机制解剖)
-> 🤖 **[BB's Breakdown]**: {{ analysis.mechanism_summary }}
-
-> 🤖 **[Core Algorithm Steps]**:
-{% for step in analysis.core_algorithm_steps %}
-> {{ loop.index }}. {{ step }}
-{% else %}
-> - N/A
-{% endfor %}
-
-- **The Math / Architecture**: <INSTRUCTION: Drop the core equation or diagram here if needed.>
+{{ analysis.novelty_delta }}
 
 ---
 
-## 3. Experimental Setup & Falsifiability (实验拷问)
+## Mechanism
 
-> 🤖 **[BB's Read - How they tested it]**:
-
-- **Tested On (Datasets)**: {{ analysis.evaluation_datasets | join(", ") | default("N/A") }}
-- **Baselines Engaged**: {{ analysis.baseline_models | join(", ") | default("N/A") }}
-
-> {{ analysis.experimental_setup | trim | replace('\r\n', '\n') | replace('\r', '\n') | replace('\n', '\n> ') }}
-
-### 3.1 The Ablation Studies
-{% if analysis.ablation_findings %}
-{% for finding in analysis.ablation_findings %}
-> 🔍 [BB]: {{ finding }}
-{% endfor %}
-{% else %}
-> 🔍 [BB]: No explicit ablation findings extracted. (Suspicious).
-{% endif %}
-
-- **My Critique on Rigor**: <INSTRUCTION: Did they cheat the prompt? Are the baselines strawmen?>
+{{ analysis.mechanism_summary }}
 
 ---
 
-## 4. Vulnerabilities & Attack Vectors (攻击面)
+## Critical Flaws
+
 {% if analysis.critical_flaws %}
 {% for flaw in analysis.critical_flaws %}
-> 💥 [BB]: {{ flaw }}
+- {{ flaw }}
 {% endfor %}
 {% else %}
-> 💥 [BB]: None detected (Highly Suspicious).
+- (None extracted.)
 {% endif %}
-
-- [ ] **Actionable Attack**: <INSTRUCTION: How can I beat this baseline or exploit this flaw?>
-
----
-
-## 5. Connections (Graph Edges)
-- **Extracted Thoughts**: [[Thought/ ...]]
-
----
-*📺 [Broadcasted via BB Channel]*

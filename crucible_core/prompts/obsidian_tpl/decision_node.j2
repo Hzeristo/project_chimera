@@ -1,0 +1,31 @@
+---
+type: decision
+status: active
+title: "{{ title | default('', true) | replace('"', '\\"') }}"
+created: "{{ current_date | default('', true) }}"
+tags: [decision]
+graph_edges:
+  depends_on: []
+  dead_ends: []
+  supersedes: []
+  contradicts: []
+rationale: "{{ rationale | default('', true) | replace('"', '\\"') }}"
+---
+
+# {{ title | default('Untitled Decision', true) }}
+
+## Decision
+
+{{ body | default('', true) }}
+
+---
+
+## Rationale
+
+{{ rationale | default('', true) }}
+
+---
+
+## What Was Abandoned
+
+{{ abandoned | default('', true) }}

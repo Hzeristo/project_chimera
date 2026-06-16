@@ -1,0 +1,32 @@
+---
+type: insight
+status: cross_verified
+title: "{{ title | default('', true) | replace('"', '\\"') }}"
+created: "{{ current_date | default('', true) }}"
+tags: [insight]
+graph_edges:
+  synthesizes: []
+  verified_with: []
+  derives_from: []
+  supersedes: []
+  contradicts: []
+actionable: "{{ actionable | default('', true) | replace('"', '\\"') }}"
+---
+
+# {{ title | default('Untitled Insight', true) }}
+
+## Insight
+
+{{ body | default('', true) }}
+
+---
+
+## Implications
+
+{{ implications | default('', true) }}
+
+---
+
+## Actionable Next Step
+
+{{ actionable | default('', true) }}
