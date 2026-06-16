@@ -8,6 +8,7 @@ from typing import Any
 
 from src.crucible.services.fetch_arxiv_workflow import fetch_and_process_arxiv
 from src.crucible.services.task_service import TaskStatus, get_task_service
+from src.oligo.core.schemas import ToolOutput
 
 
 async def arxiv_miner(query: str, max_results: int = 5, **kwargs: Any) -> str:
@@ -51,7 +52,7 @@ async def _run_daily_with_progress(
     arxiv_query: str | None,
     arxiv_max_results: int | None,
     skip_telegram: bool,
-) -> str:
+):
     from src.crucible.services.daily_chimera_service import (
         run_daily_pipeline_with_stage_events,
     )
@@ -142,7 +143,10 @@ async def check_task_status(task_id: str, **kwargs: Any) -> str:
 
     if task.status == TaskStatus.COMPLETED:
         body = task.result or ""
-        return f"[Task Completed] {body}"
+        try:
+            return ToolOutput.model_validate_json(body)
+        except Exception:
+            return f"[Task Completed] {body}"
     if task.status == TaskStatus.FAILED:
         return f"[Task Failed] {task.error}"
     if task.status == TaskStatus.RUNNING:

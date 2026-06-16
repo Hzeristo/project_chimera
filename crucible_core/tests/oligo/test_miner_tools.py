@@ -6,9 +6,11 @@
 from __future__ import annotations
 
 import asyncio
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 from src.oligo.tools.miner_tools import arxiv_miner, check_task_status, daily_paper_pipeline
+from src.oligo.core.schemas import Artifact, ToolOutput
+from src.crucible.services.task_service import TaskStatus
 
 
 def test_arxiv_miner_returns_task_id():
@@ -29,6 +31,37 @@ def test_arxiv_miner_empty_query():
     """空查询必须拒绝，不得启动任务。"""
     result = asyncio.run(arxiv_miner(""))
     assert "[Tool Error]" in result
+
+
+def _make_completed_task(result: str) -> MagicMock:
+    t = MagicMock()
+    t.status = TaskStatus.COMPLETED
+    t.result = result
+    return t
+
+
+def test_check_task_status_returns_tool_output_for_pipeline():
+    payload = ToolOutput(
+        text="summary",
+        artifacts=[Artifact(kind="vault_note", path="/vault/Must_Read/foo.md", metadata={"arxiv_id": "123"})],
+    ).model_dump_json()
+    mock_svc = MagicMock()
+    mock_svc.get_task_status.return_value = _make_completed_task(payload)
+    with patch("src.oligo.tools.miner_tools.get_task_service", return_value=mock_svc):
+        result = asyncio.run(check_task_status("task-123"))
+    assert isinstance(result, ToolOutput)
+    assert result.text == "summary"
+    assert result.artifacts[0].kind == "vault_note"
+
+
+def test_check_task_status_legacy_fallback_for_plain_string():
+    mock_svc = MagicMock()
+    mock_svc.get_task_status.return_value = _make_completed_task("arxiv fetch done: 5 papers")
+    with patch("src.oligo.tools.miner_tools.get_task_service", return_value=mock_svc):
+        result = asyncio.run(check_task_status("task-456"))
+    assert isinstance(result, str)
+    assert "[Task Completed]" in result
+    assert "arxiv fetch done" in result
 
 
 def test_daily_paper_pipeline_returns_task_id():

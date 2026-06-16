@@ -5,11 +5,14 @@ from __future__ import annotations
 import asyncio
 import html
 import logging
+from pathlib import Path
 from typing import Any
 from urllib.parse import quote
 
 from src.crucible.core.config import ChimeraConfig, get_config, PaperMinerSettings
+from src.crucible.core.naming import sanitize_filename
 from src.crucible.core.schemas import BatchFilterStats
+from src.oligo.core.schemas import Artifact, ToolOutput
 from src.crucible.ports.notify.telegram_notifier import TelegramNotifier
 from src.crucible.services.batch_filter_workflow import run_batch_filter
 from src.crucible.services.fetch_arxiv_workflow import run_arxiv_fetch
@@ -60,6 +63,40 @@ def _update_task_progress(
 ) -> None:
     if task_service is not None and task_id is not None:
         task_service.update_progress(task_id, progress, message)
+
+
+def _collect_must_read_lines(stats: BatchFilterStats) -> list[str]:
+    lines = []
+    for item in stats.must_read_items:
+        paper_id = str(item.id).strip()
+        short_moniker = str(item.short_moniker).strip()
+        legacy_title = str(item.title).strip()
+        if short_moniker:
+            title = f"{paper_id} {short_moniker}".strip() if paper_id else short_moniker
+        elif legacy_title:
+            title = legacy_title
+        else:
+            title = paper_id
+        lines.append(f"  {title} [{item.score}/10]")
+    return lines
+
+
+def _collect_pipeline_artifacts(
+    stats: BatchFilterStats, inbox_folder: Path
+) -> list[Artifact]:
+    artifacts = []
+    for item in stats.must_read_items:
+        moniker = sanitize_filename(item.short_moniker) if item.short_moniker else ""
+        basename = f"{item.id}-{moniker}" if moniker else sanitize_filename(item.id)
+        path = str(inbox_folder / "Must_Read" / f"{basename}.md")
+        artifacts.append(
+            Artifact(
+                kind="vault_note",
+                path=path,
+                metadata={"arxiv_id": item.id, "verdict": "must_read", "score": item.score},
+            )
+        )
+    return artifacts
 
 
 def run_daily_pipeline(
@@ -154,6 +191,9 @@ def run_daily_pipeline(
         f"batch_total={stats.total} must_read={stats.must_read} skim={stats.skim} "
         f"reject={stats.reject} errors={stats.errors} telegram={'no' if skip_telegram else 'yes'}"
     )
+    must_read_lines = _collect_must_read_lines(stats)
+    if must_read_lines:
+        summary += "\nMust Read:\n" + "\n".join(must_read_lines)
     logger.info("[Service] %s", summary)
     return summary
 
@@ -251,8 +291,13 @@ async def run_daily_pipeline_with_stage_events(
         f"batch_total={stats.total} must_read={stats.must_read} skim={stats.skim} "
         f"reject={stats.reject} errors={stats.errors} telegram={'no' if skip_telegram else 'yes'}"
     )
+    must_read_lines = _collect_must_read_lines(stats)
+    if must_read_lines:
+        summary += "\nMust Read:\n" + "\n".join(must_read_lines)
     logger.info("[Service] %s", summary)
-    return summary
+    inbox_folder = settings.require_path("inbox_folder")
+    artifacts = _collect_pipeline_artifacts(stats, inbox_folder)
+    return ToolOutput(text=summary, artifacts=artifacts if artifacts else None).model_dump_json()
 
 
 def _render_daily_report(
