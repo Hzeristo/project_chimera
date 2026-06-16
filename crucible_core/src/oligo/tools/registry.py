@@ -19,6 +19,7 @@ from src.oligo.tools.vault_tools import (
     search_vault,
     search_vault_attribute,
 )
+from src.oligo.tools.vault_query import vault_query
 from src.oligo.tools.web_search import web_search
 
 ToolFn = Callable[..., Awaitable[str | ToolOutput]]
@@ -398,6 +399,26 @@ def _register_default_tools(reg: ToolRegistry) -> None:
                 '<tool_call name="fork_agent"><args>{"prompt": "List all cited papers in this excerpt."}</args></tool_call>',
                 '<tool_call name="fork_agent"><args>{"prompt": "What is the main contribution of this work?", "max_turns": 1}</args></tool_call>',
                 '<tool_call name="fork_agent"><args>{"prompt": "Translate this abstract to English and summarise."}</args></tool_call>',
+            ],
+        ),
+    )
+    reg.register(
+        vault_query,
+        ToolSpec(
+            name="vault_query",
+            description="Ripgrep vault frontmatter for notes matching type, status, or edge target. Returns title + path + excerpt per match.",
+            args_schema={
+                "type": {"type": "str", "required": False, "help": "Node type to match (knowledge, thought, insight, decision)."},
+                "status": {"type": "str", "required": False, "help": "Status value to match (e.g. unverified, active, dead_end)."},
+                "linked_to": {"type": "str", "required": False, "help": "arxiv_id or title substring that must appear in a graph_edges list."},
+            },
+            concurrency_safe=True,
+            long_running=False,
+            user_aliases=["vault search", "query vault", "find notes"],
+            examples=[
+                '<tool_call name="vault_query"><args>{"type": "knowledge"}</args></tool_call>',
+                '<tool_call name="vault_query"><args>{"type": "thought", "status": "dead_end"}</args></tool_call>',
+                '<tool_call name="vault_query"><args>{"linked_to": "2501.12345"}</args></tool_call>',
             ],
         ),
     )
