@@ -14,9 +14,9 @@ from src.crucible.core.naming import sanitize_filename
 from src.crucible.core.schemas import BatchFilterStats
 from src.oligo.core.schemas import Artifact, ToolOutput
 from src.crucible.ports.notify.telegram_notifier import TelegramNotifier
-from src.crucible.services.batch_filter_workflow import run_batch_filter
-from src.crucible.services.fetch_arxiv_workflow import run_arxiv_fetch
-from src.crucible.ports.ingest.mineru_pipeline import run_pdf_ingestion
+from src.crucible.services.batch_filter_workflow import filter_queue_worker
+from src.crucible.ports.arxiv.arxiv_fetch import ArxivFetcher
+from src.crucible.ports.ingest.mineru_pipeline import convert_queue_worker
 from src.crucible.services.task_service import TaskService
 
 logger = logging.getLogger(__name__)
@@ -108,93 +108,23 @@ def run_daily_pipeline(
     task_id: str | None = None,
     task_service: TaskService | None = None,
 ) -> str:
+    """Full Chimera daily path with producer-consumer pipelining.
+
+    Three concurrent stages joined by bounded queues:
+      download (semaphore=3) → pdf_queue → convert (single GPU worker) → md_queue → filter (semaphore=3)
+
+    Returns a short text summary.
     """
-    Full Chimera daily path: arXiv fetch → MinerU ingestion → batch LLM triage → optional Telegram.
-
-    When ``task_id`` and ``task_service`` are set (e.g. Oligo background task), progress is reported
-    in bands: 0.0–0.2 fetch, 0.2–0.6 ingest, 0.6–0.95 batch filter, 0.95–1.0 Telegram (if not skipped).
-
-    Returns a short text summary for logs and task completion payloads.
-    """
-    if settings is None:
-        settings = get_config()
-    settings = _merge_arxiv_overrides(settings, arxiv_query, arxiv_max_results)
-
-    logger.info("[Service] === Chimera Daily Pipeline Started ===")
-
-    pm = settings.paper_miner_or_default
-    input_dir = pm.arxivpdf_dir
-
-    _update_task_progress(
-        task_service, task_id, 0.05, "ArXiv fetch (metadata + PDF download)..."
-    )
-    new_pdfs_count = run_arxiv_fetch(target_dir=input_dir, settings=settings)
-    logger.info("[Service] Arxiv fetching completed. new_pdfs_count=%s", new_pdfs_count)
-    _update_task_progress(
-        task_service,
-        task_id,
-        0.2,
-        f"ArXiv fetch done (new PDFs: {new_pdfs_count}).",
-    )
-
-    raw_output_dir = pm.md_papers_raw_dir
-    clean_dir = pm.md_papers_dir
-    _update_task_progress(
-        task_service, task_id, 0.25, "PDF ingestion (MinerU) → markdown..."
-    )
-    ingested_count = run_pdf_ingestion(
-        input_dir=input_dir,
-        output_dir=raw_output_dir,
-        clean_dir=clean_dir,
-        settings=settings,
-    )
-    logger.info("[Service] Ingestion completed. success_count=%s", ingested_count)
-    _update_task_progress(
-        task_service,
-        task_id,
-        0.6,
-        f"Ingestion done (success count: {ingested_count}).",
-    )
-
-    _update_task_progress(
-        task_service, task_id, 0.65, "Batch filter (LLM triage)..."
-    )
-    stats = run_batch_filter(md_papers_dir=clean_dir, settings=settings)
-    logger.info("[Service] Triage completed. stats=%s", stats)
-    _update_task_progress(
-        task_service,
-        task_id,
-        0.95,
-        (
-            f"Triage done: total={stats.total} must_read={stats.must_read} "
-            f"skim={stats.skim} reject={stats.reject} errors={stats.errors}."
-        ),
-    )
-
-    if not skip_telegram:
-        _update_task_progress(
-            task_service, task_id, 0.96, "Telegram morning broadcast..."
+    summary, _stats = asyncio.run(
+        _run_pipelined_async(
+            settings=settings,
+            arxiv_query=arxiv_query,
+            arxiv_max_results=arxiv_max_results,
+            skip_telegram=skip_telegram,
+            task_id=task_id,
+            task_service=task_service,
         )
-        report_message, reply_markup = _render_daily_report(
-            stats=stats, new_pdfs_count=new_pdfs_count
-        )
-        notifier = TelegramNotifier(settings=settings)
-        notifier.send_summary(html_message=report_message, reply_markup=reply_markup)
-        _update_task_progress(task_service, task_id, 0.99, "Telegram sent.")
-    else:
-        _update_task_progress(
-            task_service, task_id, 0.99, "Telegram skipped (skip_telegram=True)."
-        )
-
-    summary = (
-        f"Daily pipeline completed. new_pdfs={new_pdfs_count} ingested={ingested_count} "
-        f"batch_total={stats.total} must_read={stats.must_read} skim={stats.skim} "
-        f"reject={stats.reject} errors={stats.errors} telegram={'no' if skip_telegram else 'yes'}"
     )
-    must_read_lines = _collect_must_read_lines(stats)
-    if must_read_lines:
-        summary += "\nMust Read:\n" + "\n".join(must_read_lines)
-    logger.info("[Service] %s", summary)
     return summary
 
 
@@ -207,84 +137,144 @@ async def run_daily_pipeline_with_stage_events(
     arxiv_max_results: int | None = None,
     skip_telegram: bool = False,
 ) -> str:
-    """
-    Async wrapper for daily pipeline with stage-change events.
+    """Async path for task bus + SSE consumers. Delegates to the same pipelined core."""
+    if settings is None:
+        settings = get_config()
+    summary, stats = await _run_pipelined_async(
+        settings=settings,
+        arxiv_query=arxiv_query,
+        arxiv_max_results=arxiv_max_results,
+        skip_telegram=skip_telegram,
+        task_id=task_id,
+        task_service=task_service,
+    )
+    inbox_folder = settings.require_path("inbox_folder")
+    artifacts = _collect_pipeline_artifacts(stats, inbox_folder)
+    return ToolOutput(text=summary, artifacts=artifacts if artifacts else None).model_dump_json()
 
-    This path is for task bus + SSE consumers (front-end stage timers).
+
+async def _run_pipelined_async(
+    settings: ChimeraConfig | None,
+    *,
+    arxiv_query: str | None,
+    arxiv_max_results: int | None,
+    skip_telegram: bool,
+    task_id: str | None,
+    task_service: TaskService | None,
+) -> tuple[str, BatchFilterStats]:
+    """Core pipeline: download → convert → filter, three concurrent stages via asyncio.Queue.
+
+    Returns (summary_str, stats) so both the sync wrapper and the stage-events wrapper
+    can build their own return value from the same data.
     """
     if settings is None:
         settings = get_config()
     settings = _merge_arxiv_overrides(settings, arxiv_query, arxiv_max_results)
-    logger.info("[Service] === Chimera Daily Pipeline Started (stage-event mode) ===")
+    settings.ensure_directories()
 
+    logger.info("[Service] === Chimera Daily Pipeline Started (pipelined) ===")
     pm = settings.paper_miner_or_default
-    input_dir = pm.arxivpdf_dir
 
-    await task_service.start_stage(
-        task_id,
-        stage_id=DailyPipelineStage.ARXIV_FETCH[0],
-        stage_label=DailyPipelineStage.ARXIV_FETCH[1],
-        overall_progress=0.0,
-    )
-    new_pdfs_count = await asyncio.to_thread(run_arxiv_fetch, target_dir=input_dir, settings=settings)
-    task_service.update_progress(
-        task_id, 0.2, f"ArXiv fetch done (new PDFs: {new_pdfs_count})."
-    )
+    if task_service is not None and task_id is not None:
+        await task_service.start_stage(
+            task_id,
+            stage_id=DailyPipelineStage.ARXIV_FETCH[0],
+            stage_label=DailyPipelineStage.ARXIV_FETCH[1],
+            overall_progress=0.0,
+        )
 
-    raw_output_dir = pm.md_papers_raw_dir
-    clean_dir = pm.md_papers_dir
-    await task_service.start_stage(
-        task_id,
-        stage_id=DailyPipelineStage.PDF_INGESTION[0],
-        stage_label=DailyPipelineStage.PDF_INGESTION[1],
-        overall_progress=0.2,
-    )
-    ingested_count = await asyncio.to_thread(
-        run_pdf_ingestion,
-        input_dir=input_dir,
-        output_dir=raw_output_dir,
-        clean_dir=clean_dir,
-        settings=settings,
-    )
-    task_service.update_progress(
-        task_id, 0.6, f"Ingestion done (success count: {ingested_count})."
+    fetcher = ArxivFetcher(settings=settings)
+    paper_records = await asyncio.to_thread(fetcher.fetch_metadata)
+    new_pdfs_count_holder: list[int] = [0]
+    logger.info("[Service] Arxiv metadata fetched. records=%s", len(paper_records))
+    _update_task_progress(
+        task_service, task_id, 0.1, f"Metadata fetched ({len(paper_records)} records). Starting pipeline..."
     )
 
-    await task_service.start_stage(
-        task_id,
-        stage_id=DailyPipelineStage.BATCH_FILTER[0],
-        stage_label=DailyPipelineStage.BATCH_FILTER[1],
-        overall_progress=0.6,
+    pdf_queue: asyncio.Queue[Path | None] = asyncio.Queue(maxsize=5)
+    md_queue: asyncio.Queue[Path | None] = asyncio.Queue(maxsize=5)
+    download_sem = asyncio.Semaphore(3)
+    stats = BatchFilterStats()
+    stats_lock = asyncio.Lock()
+
+    normalized_raw = pm.md_papers_raw_dir.resolve()
+    normalized_clean = pm.md_papers_dir.resolve()
+
+    async def _download_stage() -> None:
+        count = await fetcher.download_pdfs_to_queue(
+            paper_records=paper_records,
+            target_dir=pm.arxivpdf_dir,
+            pdf_queue=pdf_queue,
+            semaphore=download_sem,
+        )
+        new_pdfs_count_holder[0] = count
+        _update_task_progress(
+            task_service, task_id, 0.2, f"Downloads done ({count} new PDFs). Converting..."
+        )
+
+    if task_service is not None and task_id is not None:
+        await task_service.start_stage(
+            task_id,
+            stage_id=DailyPipelineStage.PDF_INGESTION[0],
+            stage_label=DailyPipelineStage.PDF_INGESTION[1],
+            overall_progress=0.2,
+        )
+
+    filter_workers = [
+        asyncio.create_task(
+            filter_queue_worker(md_queue, stats, stats_lock, settings=settings),
+            name=f"filter-worker-{i}",
+        )
+        for i in range(3)
+    ]
+
+    convert_task = asyncio.create_task(
+        convert_queue_worker(pdf_queue, md_queue, normalized_raw, normalized_clean),
+        name="convert-worker",
     )
-    stats = await asyncio.to_thread(run_batch_filter, md_papers_dir=clean_dir, settings=settings)
-    task_service.update_progress(
+    download_task = asyncio.create_task(_download_stage(), name="download-stage")
+
+    await asyncio.gather(download_task, convert_task, *filter_workers)
+
+    ingested_count = convert_task.result()
+    new_pdfs_count = new_pdfs_count_holder[0]
+
+    logger.info(
+        "[Service] Pipeline stages done. new_pdfs=%s ingested=%s filtered=%s",
+        new_pdfs_count, ingested_count, stats.total,
+    )
+
+    if task_service is not None and task_id is not None:
+        await task_service.start_stage(
+            task_id,
+            stage_id=DailyPipelineStage.BATCH_FILTER[0],
+            stage_label=DailyPipelineStage.BATCH_FILTER[1],
+            overall_progress=0.6,
+        )
+    _update_task_progress(
+        task_service,
         task_id,
         0.95,
-        (
-            f"Triage done: total={stats.total} must_read={stats.must_read} "
-            f"skim={stats.skim} reject={stats.reject} errors={stats.errors}."
-        ),
+        f"Triage done: total={stats.total} must_read={stats.must_read} "
+        f"skim={stats.skim} reject={stats.reject} errors={stats.errors}.",
     )
 
     if not skip_telegram:
-        await task_service.start_stage(
-            task_id,
-            stage_id=DailyPipelineStage.TELEGRAM_NOTIFY[0],
-            stage_label=DailyPipelineStage.TELEGRAM_NOTIFY[1],
-            overall_progress=0.95,
-        )
-        report_message, reply_markup = _render_daily_report(
-            stats=stats, new_pdfs_count=new_pdfs_count
-        )
+        if task_service is not None and task_id is not None:
+            await task_service.start_stage(
+                task_id,
+                stage_id=DailyPipelineStage.TELEGRAM_NOTIFY[0],
+                stage_label=DailyPipelineStage.TELEGRAM_NOTIFY[1],
+                overall_progress=0.95,
+            )
+        report_message, reply_markup = _render_daily_report(stats=stats, new_pdfs_count=new_pdfs_count)
         notifier = TelegramNotifier(settings=settings)
         await asyncio.to_thread(
             notifier.send_summary, html_message=report_message, reply_markup=reply_markup
         )
-        task_service.update_progress(task_id, 0.99, "Telegram sent.")
+        _update_task_progress(task_service, task_id, 0.99, "Telegram sent.")
     else:
-        task_service.update_progress(
-            task_id, 0.99, "Telegram skipped (skip_telegram=True)."
-        )
+        _update_task_progress(task_service, task_id, 0.99, "Telegram skipped.")
 
     summary = (
         f"Daily pipeline completed. new_pdfs={new_pdfs_count} ingested={ingested_count} "
@@ -295,9 +285,7 @@ async def run_daily_pipeline_with_stage_events(
     if must_read_lines:
         summary += "\nMust Read:\n" + "\n".join(must_read_lines)
     logger.info("[Service] %s", summary)
-    inbox_folder = settings.require_path("inbox_folder")
-    artifacts = _collect_pipeline_artifacts(stats, inbox_folder)
-    return ToolOutput(text=summary, artifacts=artifacts if artifacts else None).model_dump_json()
+    return summary, stats
 
 
 def _render_daily_report(

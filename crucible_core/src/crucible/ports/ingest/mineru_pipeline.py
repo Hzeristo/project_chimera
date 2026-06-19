@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import shutil
 from dataclasses import dataclass
@@ -221,4 +222,59 @@ def run_pdf_ingestion(
             logger.error("[Ingest] PDF ingestion failed for %s: %s", pdf_path, exc)
             continue
 
+    return success_count
+
+
+async def convert_queue_worker(
+    pdf_queue: asyncio.Queue[Path | None],
+    md_queue: asyncio.Queue[Path | None],
+    normalized_raw_output: Path,
+    normalized_clean_dir: Path,
+) -> int:
+    """Single-worker coroutine: drain pdf_queue, convert each PDF via MinerU, put md_path to md_queue.
+
+    Single worker is intentional — two concurrent MinerU subprocesses would OOM on RTX 5060 8GB.
+    Puts None sentinel to md_queue when done.
+    Returns count of successfully converted PDFs.
+    """
+    client = MineruClient(output_root=normalized_raw_output)
+    paper_loader = PaperLoader()
+    success_count = 0
+
+    while True:
+        pdf_path = await pdf_queue.get()
+        if pdf_path is None:
+            break
+
+        paper_stem = pdf_path.stem
+        try:
+            raw_md = await asyncio.to_thread(client.convert, pdf_path)
+            raw_paper_dir = normalized_raw_output / paper_stem
+            if not raw_paper_dir.exists() or not raw_paper_dir.is_dir():
+                raw_paper_dir = raw_md.parent
+
+            clean_md = await asyncio.to_thread(
+                paper_loader.extract_and_clean,
+                raw_paper_dir=raw_paper_dir,
+                clean_dir=normalized_clean_dir,
+                paper_stem=paper_stem,
+            )
+
+            canonical_raw_dir = normalized_raw_output / paper_stem
+            cleanup_target = canonical_raw_dir if canonical_raw_dir.exists() else raw_paper_dir
+            try:
+                if cleanup_target.exists() and cleanup_target.is_dir():
+                    shutil.rmtree(cleanup_target)
+                    logger.info("[Ingest] Removed raw folder: %s", cleanup_target)
+            except Exception as cleanup_exc:
+                logger.warning("[Ingest] Failed to cleanup raw folder for %s: %s", pdf_path.name, cleanup_exc)
+
+            success_count += 1
+            await md_queue.put(clean_md)
+            logger.info("[Ingest] Converted and queued: %s", clean_md.name)
+        except Exception as exc:
+            logger.error("[Ingest] PDF ingestion failed for %s: %s", pdf_path, exc)
+
+    await md_queue.put(None)
+    logger.info("[Ingest] Convert worker done. success_count=%s", success_count)
     return success_count

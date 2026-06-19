@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import csv
 import logging
 import re
@@ -239,6 +240,84 @@ class ArxivFetcher:
                 logger.warning("[Arxiv] Failed to write PDF %s: %s", pdf_path, exc)
 
         return downloaded_count
+
+    async def download_pdfs_to_queue(
+        self,
+        paper_records: list[dict],
+        target_dir: Path,
+        pdf_queue: asyncio.Queue[Path | None],
+        *,
+        semaphore: asyncio.Semaphore,
+    ) -> int:
+        """Download PDFs concurrently (bounded by semaphore) and put each path to pdf_queue.
+
+        Puts None sentinel when all downloads are done so the convert stage can exit.
+        Returns count of successfully downloaded PDFs.
+        """
+        try:
+            target_dir.mkdir(parents=True, exist_ok=True)
+        except OSError as exc:
+            logger.warning("[Arxiv] Failed to prepare target directory %s: %s", target_dir, exc)
+            await pdf_queue.put(None)
+            return 0
+
+        valid_records = [
+            r for r in paper_records
+            if isinstance(r.get("id"), str) and isinstance(r.get("pdf_url"), str)
+        ]
+
+        async def _download_one(record: dict) -> Path | None:
+            paper_id: str = record["id"]
+            pdf_url: str = record["pdf_url"]
+
+            if self._is_seen_paper(paper_id):
+                logger.info("[Arxiv] Skip seen paper: %s", paper_id)
+                return None
+
+            pdf_path = target_dir / f"{paper_id}.pdf"
+            if pdf_path.exists():
+                logger.info("[Arxiv] Skip existing PDF: %s", pdf_path.name)
+                return pdf_path
+
+            async with semaphore:
+                try:
+                    await asyncio.to_thread(self._download_one_sync, pdf_url, pdf_path, paper_id)
+                    return pdf_path
+                except Exception:
+                    return None
+
+        tasks = [asyncio.create_task(_download_one(r)) for r in valid_records]
+        downloaded = 0
+        for coro in asyncio.as_completed(tasks):
+            result = await coro
+            if result is not None:
+                downloaded += 1
+                await pdf_queue.put(result)
+
+        await pdf_queue.put(None)
+        logger.info("[Arxiv] Download stage done. downloaded=%s", downloaded)
+        return downloaded
+
+    def _download_one_sync(self, pdf_url: str, pdf_path: Path, paper_id: str) -> None:
+        try:
+            with requests.get(
+                pdf_url,
+                stream=True,
+                headers=self.REQUEST_HEADERS,
+                timeout=self.timeout_seconds,
+            ) as response:
+                response.raise_for_status()
+                with pdf_path.open("wb") as file_obj:
+                    for chunk in response.iter_content(chunk_size=8192):
+                        if chunk:
+                            file_obj.write(chunk)
+            logger.info("[Arxiv] Downloaded PDF: %s", pdf_path.name)
+        except requests.RequestException as exc:
+            logger.warning("[Arxiv] Failed to download %s from %s: %s", paper_id, pdf_url, exc)
+            raise
+        except OSError as exc:
+            logger.warning("[Arxiv] Failed to write PDF %s: %s", pdf_path, exc)
+            raise
 
     def _load_seen_ids(self) -> set[str]:
         audit_log_path = self.settings.paper_miner_or_default.papers_root / "audit_log.csv"

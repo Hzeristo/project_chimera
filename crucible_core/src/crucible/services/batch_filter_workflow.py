@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from pathlib import Path
 
@@ -122,3 +123,90 @@ def run_batch_filter(
                 )
 
     return stats
+
+
+async def filter_queue_worker(
+    md_queue: asyncio.Queue[Path | None],
+    stats: BatchFilterStats,
+    stats_lock: asyncio.Lock,
+    *,
+    settings: ChimeraConfig,
+) -> None:
+    """Concurrent filter worker: drain md_queue, evaluate each paper, update shared stats.
+
+    Poison pill: on receiving None, puts it back (for other workers) and exits.
+    All blocking IO (LLM call, vault write, route) runs in asyncio.to_thread.
+    """
+    loader = PaperLoader()
+    prompt_manager = PromptManager()
+    llm = build_openai_client(settings)
+    engine = FilterService(llm_client=llm, prompt_manager=prompt_manager)
+    writer = VaultNoteWriter(settings=settings, prompt_manager=prompt_manager)
+    router = PaperArchiveAdapter(settings=settings)
+
+    while True:
+        md_path = await md_queue.get()
+        if md_path is None:
+            await md_queue.put(None)
+            break
+
+        paper_id_for_cleanup = md_path.stem
+        try:
+            paper = await asyncio.to_thread(loader.load_paper, md_path)
+            paper_id_for_cleanup = paper.id
+            result = await asyncio.to_thread(engine.evaluate_paper, paper)
+
+            output_path: Path | None = None
+            if result.verdict == VerdictDecision.MUST_READ:
+                output_path = await asyncio.to_thread(writer.write_knowledge_node, paper, result)
+            elif result.verdict == VerdictDecision.SKIM:
+                await asyncio.to_thread(writer.write_knowledge_node, paper, result)
+
+            await asyncio.to_thread(router.route_and_cleanup, paper, result)
+
+            async with stats_lock:
+                stats.processed_ids.append(paper.id)
+                if result.verdict == VerdictDecision.MUST_READ:
+                    stats.must_read += 1
+                    moniker = result.short_moniker.strip()
+                    display_title = (
+                        f"{paper.id} {moniker}".strip() if moniker else str(paper.id)
+                    )
+                    assert output_path is not None
+                    stats.must_read_titles.append(display_title)
+                    stats.must_read_items.append(
+                        BatchMustReadItem(
+                            score=int(result.score),
+                            id=paper.id,
+                            paper_id=paper.id,
+                            short_moniker=moniker,
+                            filename=output_path.name,
+                            title=display_title,
+                            novelty=result.novelty_delta,
+                        )
+                    )
+                elif result.verdict == VerdictDecision.SKIM:
+                    stats.skim += 1
+                else:
+                    stats.reject += 1
+                stats.total += 1
+
+            logger.info(
+                "[Service] Filtered %s: verdict=%s", paper.id, result.verdict.value
+            )
+        except Exception as exc:
+            logger.error("[Service] Failed processing %s: %s", paper_id_for_cleanup, exc)
+            async with stats_lock:
+                stats.errors += 1
+            try:
+                await asyncio.to_thread(
+                    router.route_failed_cleanup,
+                    paper_id=paper_id_for_cleanup,
+                    md_path=md_path,
+                )
+            except RuntimeError as cleanup_exc:
+                logger.warning(
+                    "[Service] Failed cleanup fallback for %s: %s",
+                    paper_id_for_cleanup,
+                    cleanup_exc,
+                )
