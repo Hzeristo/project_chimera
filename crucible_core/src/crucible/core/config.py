@@ -137,6 +137,7 @@ class SystemConfig(BaseModel):
     )
     playground_dir: Path | None = None
     staging_dir: Path = Field(default_factory=lambda: get_project_root() / "docs" / "staging")
+    vault_router_url: str | None = None
 
 
 class OligoConfig(BaseModel):

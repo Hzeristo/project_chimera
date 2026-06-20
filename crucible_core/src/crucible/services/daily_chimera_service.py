@@ -315,8 +315,9 @@ def _render_daily_report(
         novelty = item.novelty
         encoded_id = quote(paper_id, safe="")
         arxiv_url = f"https://arxiv.org/abs/{encoded_id}" if paper_id else "#"
+        _router_base = get_config().system.vault_router_url or "https://chimeravaultrouter.haydenshui.workers.dev"
         obsidian_url = (
-            f"https://chimeravaultrouter.haydenshui.workers.dev/?id={encoded_id}"
+            f"{_router_base}/?id={encoded_id}"
             if paper_id
             else "#"
         )
