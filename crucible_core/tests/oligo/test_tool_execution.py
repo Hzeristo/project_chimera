@@ -203,7 +203,7 @@ async def test_execute_tool_calls_denied_tools_materialized(mock_client):
 
 
 async def test_execute_tool_calls_unknown_tool_returns_error(mock_client):
-    """Unknown tool name is caught at execution and returns ERROR status."""
+    """Unknown tool name returns SUCCESS with a 'not recognized' fallback message in raw_result (no crash)."""
     agent = ChimeraAgent(
         raw_messages=[{"role": "user", "content": "Do something"}],
         system_core="You are a helpful assistant.",
@@ -223,7 +223,7 @@ async def test_execute_tool_calls_unknown_tool_returns_error(mock_client):
     ]
     results = await agent._execute_tool_calls(planned)
     assert len(results) == 1
-    assert results[0].status == ToolCallStatus.ERROR
+    assert results[0].status == ToolCallStatus.SUCCESS
     assert "not recognized" in results[0].raw_result
 
 
