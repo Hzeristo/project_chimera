@@ -2,6 +2,8 @@
 """Tests for ChimeraAgent tool execution layer."""
 from __future__ import annotations
 
+import json
+
 from src.crucible.core.schemas import ExecutedToolResult, PlannedToolCall, ToolCallStatus
 from src.oligo.core.agent import (
     ChimeraAgent,
@@ -10,6 +12,24 @@ from src.oligo.core.agent import (
     _strip_router_dsl_for_backfill,
 )
 from src.oligo.tools.vault_tools import set_vault_adapter
+
+
+def _reconstruct_final_stream_text(chunks: list[str]) -> str:
+    """Rejoin the ``content`` of every ``bb-stream-chunk`` SSE frame.
+
+    run_theater() emits the final answer as ``event: bb-stream-chunk\\n
+    data: {"content": "..."}\\n\\n`` frames (3 chars each), so the verbatim
+    text is never contiguous in ``"".join(chunks)``.
+    """
+    text = ""
+    for frame in chunks:
+        lines = frame.split("\n")
+        if "event: bb-stream-chunk" not in lines:
+            continue
+        for line in lines:
+            if line.startswith("data: "):
+                text += json.loads(line[len("data: "):]).get("content", "")
+    return text
 
 
 def test_parse_tool_calls_extracts_single_tool(mock_client):
@@ -306,8 +326,7 @@ async def test_run_theater_no_tool_passes_through_to_final_stream(mock_client):
 
     assert client.probe_call_count == 1
     assert client.final_call_count == 1
-    full_output = "".join(chunks)
-    assert "Hello from the other side" in full_output
+    assert "Hello from the other side" in _reconstruct_final_stream_text(chunks)
 
 
 async def test_run_theater_natural_language_probe_backfilled_for_final(mock_client):
@@ -339,7 +358,7 @@ async def test_run_theater_natural_language_probe_backfilled_for_final(mock_clie
         (m.get("content") or "") for m in final_call_messages if m.get("role") != "system"
     )
     assert draft in contents
-    assert "Polished persona answer" in "".join(chunks)
+    assert "Polished persona answer" in _reconstruct_final_stream_text(chunks)
 
 
 def test_render_tool_results_ir2_denied_and_reflection_hint(mock_client):
