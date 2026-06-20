@@ -41,7 +41,8 @@ _FINAL_REGRESSION: set[str] = {
 }
 
 # MW.4 锁定：_combined_regression_prompt_bytes() 在默认组件下的 UTF-8 长度
-MW4_COMBINED_PROMPT_BASELINE_BYTES = 7492
+# 2026-06-20: re-baselined 7492 -> 7459 (-33 B) for intentional template drift.
+MW4_COMBINED_PROMPT_BASELINE_BYTES = 7459
 
 
 def _combined_regression_prompt_bytes() -> int:

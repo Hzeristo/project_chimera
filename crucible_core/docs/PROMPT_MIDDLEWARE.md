@@ -172,6 +172,9 @@ def _render_xml_structured(data: dict[str, Any]) -> str:
 5. 在 **`_compute_active_router_components`** 或 **`_compute_active_final_components`** 中加入条件；若新片段条件复杂，可抽小函数并加单测。
 6. **更新本文档 [3. 现行 component 清单](#3-现行-component-清单)** 的表格，并在 MW.2 侧表格（若仍存在）保持同步；同步更新 `tests/oligo/test_prompt_middleware_regression.py` 中的 `MW4_COMBINED_PROMPT_BASELINE_BYTES`（若模板长度变化）。
 
+> Baseline updated 2026-06-20 (−33 B → 7459). Drift expected as prompts evolve;
+> re-baseline when intentional prompt edits land, not as regressions.
+
 ---
 
 ## 5. 三层 Strip 调用契约
