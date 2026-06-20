@@ -50,7 +50,7 @@ def test_obsidian_graph_query_adapter_not_set() -> None:
     """Uninitialized global adapter returns a clear error."""
     vt.set_vault_adapter(None)
     out = asyncio.run(vt.obsidian_graph_query())
-    assert "Vault adapter not initialized" in out
+    assert "Vault adapter not initialized" in out.text
 
 
 def test_obsidian_graph_query_no_nodes() -> None:
@@ -60,8 +60,8 @@ def test_obsidian_graph_query_no_nodes() -> None:
     out = asyncio.run(
         vt.obsidian_graph_query(node_type="decision", link_pattern="foo")
     )
-    assert "[Graph Query] No nodes found" in out
-    assert "type=" in out or "decision" in out
+    assert "[Graph Query] No nodes found" in out.text
+    assert "type=" in out.text or "decision" in out.text
     assert mock.last_call is not None
     assert mock.last_call[0] == "decision"
     assert mock.last_call[1] == "foo"
@@ -79,11 +79,11 @@ def test_obsidian_graph_query_formats_nodes_and_links() -> None:
     )
     vt.set_vault_adapter(mock)
     out = asyncio.run(vt.obsidian_graph_query())
-    assert "[Graph Query] Found 1 nodes" in out
-    assert "NoteA" in out
-    assert "thought" in out
-    assert "Links:" in out
-    assert "B" in out and "C" in out
+    assert "[Graph Query] Found 1 nodes" in out.text
+    assert "NoteA" in out.text
+    assert "thought" in out.text
+    assert "Links:" in out.text
+    assert "B" in out.text and "C" in out.text
 
 
 def test_obsidian_graph_query_passes_max_depth() -> None:
@@ -106,5 +106,5 @@ def test_obsidian_graph_query_truncates_beyond_ten() -> None:
     mock = _GraphAdapterMock(results=rows)
     vt.set_vault_adapter(mock)
     out = asyncio.run(vt.obsidian_graph_query())
-    assert "Found 12 nodes" in out
-    assert "more" in out.lower() or "…" in out or "10" in out
+    assert "Found 12 nodes" in out.text
+    assert "more" in out.text.lower() or "…" in out.text or "10" in out.text
