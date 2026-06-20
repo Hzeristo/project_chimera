@@ -303,17 +303,3 @@ class ExecuteResult(BaseModel):
     has_long_running: bool = False       # signals A.4 whether to enter AWAITING_TASK
 
     model_config = ConfigDict(extra="forbid")
-
-class TerminalReason(str, Enum):
-    """How a turn coroutine terminates. Returned by the turn, never a Phase."""
-    COMPLETED = "completed"            # SYNTHESIZING finished normally
-    TURN_EXHAUSTED = "turn_exhausted"  # max_turns reached without resolution
-    CLIENT_GONE = "client_gone"        # client disconnected mid-turn
-    LLM_TIMEOUT = "llm_timeout"        # LLM gateway exceeded deadline
-    TASK_FAILED = "task_failed"        # long-running task failed (A.4)
-
-
-class TurnOutcome(str, Enum):
-    """A turn either continues the loop (tools ran) or terminates it."""
-    CONTINUE = "continue"   # tools executed, loop to next turn
-    TERMINATE = "terminate" # synthesized final answer OR hit a terminal reason
