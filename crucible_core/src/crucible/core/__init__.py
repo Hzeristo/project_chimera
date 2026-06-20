@@ -7,13 +7,11 @@ from src.crucible.core.config import (
     PaperMinerSettings,
     Settings,
     get_config,
-    load_config,
 )
 
 __all__: list[str] = [
     "ChimeraConfig",
     "Settings",
     "get_config",
-    "load_config",
     "PaperMinerSettings",
 ]
