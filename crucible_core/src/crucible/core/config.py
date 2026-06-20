@@ -136,6 +136,7 @@ class SystemConfig(BaseModel):
         validation_alias=AliasChoices("lenses_dir", "CHIMERA_LENSES_DIR"),
     )
     playground_dir: Path | None = None
+    staging_dir: Path = Field(default_factory=lambda: get_project_root() / "docs" / "staging")
 
 
 class OligoConfig(BaseModel):

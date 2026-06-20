@@ -7,18 +7,15 @@ from pathlib import Path
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 
-from src.crucible.core.platform import get_project_root
 from src.crucible.services.staging_service import StagingService
 
 router = APIRouter(prefix="/v1/staging")
-
-_STAGING_DIR = get_project_root() / "docs" / "staging"
 
 
 def _svc(request: Request) -> StagingService:
     settings = request.app.state.settings
     return StagingService(
-        staging_dir=_STAGING_DIR,
+        staging_dir=settings.system.staging_dir,
         vault_root=settings.require_path("vault_root"),
     )
 
@@ -45,7 +42,7 @@ async def create_staging(body: CreateRequest, request: Request) -> dict:
 
 @router.get("/list")
 async def list_staging(request: Request) -> dict:
-    staging_dir = _STAGING_DIR
+    staging_dir = request.app.state.settings.system.staging_dir
     if not staging_dir.exists():
         return {"candidates": []}
     return {"candidates": [str(p) for p in sorted(staging_dir.glob("*.md"))]}
