@@ -1178,7 +1178,7 @@ class ChimeraAgent:
                 if m:
                     er = er.model_copy(update={"task_id": m.group(0)})
                     has_long_running = True
-                    patched.append(er)
+            patched.append(er)
         return ExecuteResult(executed_results=patched, has_long_running=has_long_running)
 
     async def _step_wash(
