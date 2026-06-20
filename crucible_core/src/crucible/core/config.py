@@ -748,10 +748,4 @@ def get_config() -> ChimeraConfig:
         _global_config = ChimeraConfig()
     return _global_config
 
-
-def load_config() -> ChimeraConfig:
-    """Deprecated alias for :func:`get_config`."""
-    return get_config()
-
-
 Settings = ChimeraConfig

@@ -1017,47 +1017,6 @@ class ChimeraAgent:
                 self._artifact_keys.add(key)
                 self._session_artifacts.append(art)
 
-    def archive_segment(self, start_idx: int, end_idx: int, reason: str) -> None:
-        """Replace self.messages[start_idx:end_idx] with a tombstone; persist originals to audit log.
-
-        start_idx must be >= 1 (slot 0 is the system message and is protected).
-        """
-        if start_idx < 1:
-            raise ValueError("Cannot archive system slot (index 0).")
-        if end_idx <= start_idx:
-            raise ValueError("end_idx must be > start_idx.")
-        segment = self.messages[start_idx:end_idx]
-        if not segment:
-            raise ValueError("No messages in the specified range.")
-
-        from src.crucible.core.platform import get_chimera_root
-        import json as _json
-
-        archive_dir = get_chimera_root() / "archive_log"
-        archive_dir.mkdir(parents=True, exist_ok=True)
-        session_ts = datetime.now().strftime("%Y%m%dT%H%M%S%f")
-        log_path = archive_dir / f"{session_ts}.jsonl"
-        with log_path.open("w", encoding="utf-8") as f:
-            for m in segment:
-                f.write(_json.dumps(m.model_dump(), ensure_ascii=False) + "\n")
-
-        tombstone = ChatMessage(
-            role="user",
-            content=f"[ARCHIVED] {reason}. Status: superseded. Do not reference.",
-        )
-        self.messages[start_idx:end_idx] = [tombstone]
-        if not hasattr(self, "_archive_log"):
-            self._archive_log: dict = {}
-        tombstone_idx = start_idx
-        self._archive_log[tombstone_idx] = (log_path, segment)
-
-    def unarchive_segment(self, tombstone_idx: int) -> None:
-        """Restore messages previously archived at tombstone_idx."""
-        if not hasattr(self, "_archive_log") or tombstone_idx not in self._archive_log:
-            raise KeyError(f"No archived segment at index {tombstone_idx}.")
-        _log_path, original = self._archive_log.pop(tombstone_idx)
-        self.messages[tombstone_idx : tombstone_idx + 1] = original
-
     async def _wash_tool_results(
         self,
         results: list[ExecutedToolResult],
@@ -1523,36 +1482,3 @@ class ChimeraAgent:
         ]
         summary = " ".join(lines)
         return summary[:4096]
-
-
-async def run_isolated(
-    prompt: str,
-    system_core: str,
-    llm_client: LLMClient,
-    wash_client: LLMClient | None = None,
-    router_client: LLMClient | None = None,
-    max_turns: int = 3,
-    allowed_tools: list[str] | None = None,
-) -> str:
-    """Standalone fork for tool-layer callers that have no parent agent."""
-    agent = ChimeraAgent(
-        raw_messages=[{"role": "user", "content": prompt}],
-        system_core=system_core,
-        skill_override=None,
-        llm_client=llm_client,
-        wash_client=wash_client,
-        router_client=router_client,
-        max_turns=max_turns,
-        allowed_tools=allowed_tools,
-    )
-    chunks: list[str] = []
-    async for chunk in agent._run_theater_stream():
-        chunks.append(chunk)
-    raw = "".join(chunks)
-    lines = [
-        line.removeprefix("data: ").strip()
-        for line in raw.splitlines()
-        if line.startswith("data: ") and '"text"' in line
-    ]
-    summary = " ".join(lines)
-    return summary[:4096]
