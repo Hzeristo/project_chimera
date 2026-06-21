@@ -103,9 +103,39 @@ def run_batch_filter(
                 )
             elif result.verdict == VerdictDecision.SKIM:
                 stats.skim += 1
-                writer.write_knowledge_node(paper, result)
+                output_path = writer.write_knowledge_node(paper, result)
+                moniker = result.short_moniker.strip()
+                display_title = (
+                    f"{paper.id} {moniker}".strip() if moniker else str(paper.id)
+                )
+                stats.skim_items.append(
+                    BatchMustReadItem(
+                        score=int(result.score),
+                        id=paper.id,
+                        paper_id=paper.id,
+                        short_moniker=moniker,
+                        filename=output_path.name,
+                        title=display_title,
+                        novelty=result.novelty_delta,
+                    )
+                )
             else:
                 stats.reject += 1
+                moniker = result.short_moniker.strip()
+                display_title = (
+                    f"{paper.id} {moniker}".strip() if moniker else str(paper.id)
+                )
+                stats.reject_items.append(
+                    BatchMustReadItem(
+                        score=int(result.score),
+                        id=paper.id,
+                        paper_id=paper.id,
+                        short_moniker=moniker,
+                        filename="",
+                        title=display_title,
+                        novelty=result.novelty_delta,
+                    )
+                )
             router.route_and_cleanup(paper, result)
         except Exception as exc:
             stats.errors += 1
@@ -160,7 +190,7 @@ async def filter_queue_worker(
             if result.verdict == VerdictDecision.MUST_READ:
                 output_path = await asyncio.to_thread(writer.write_knowledge_node, paper, result)
             elif result.verdict == VerdictDecision.SKIM:
-                await asyncio.to_thread(writer.write_knowledge_node, paper, result)
+                output_path = await asyncio.to_thread(writer.write_knowledge_node, paper, result)
 
             await asyncio.to_thread(router.route_and_cleanup, paper, result)
 
@@ -187,8 +217,39 @@ async def filter_queue_worker(
                     )
                 elif result.verdict == VerdictDecision.SKIM:
                     stats.skim += 1
+                    moniker = result.short_moniker.strip()
+                    display_title = (
+                        f"{paper.id} {moniker}".strip() if moniker else str(paper.id)
+                    )
+                    assert output_path is not None
+                    stats.skim_items.append(
+                        BatchMustReadItem(
+                            score=int(result.score),
+                            id=paper.id,
+                            paper_id=paper.id,
+                            short_moniker=moniker,
+                            filename=output_path.name,
+                            title=display_title,
+                            novelty=result.novelty_delta,
+                        )
+                    )
                 else:
                     stats.reject += 1
+                    moniker = result.short_moniker.strip()
+                    display_title = (
+                        f"{paper.id} {moniker}".strip() if moniker else str(paper.id)
+                    )
+                    stats.reject_items.append(
+                        BatchMustReadItem(
+                            score=int(result.score),
+                            id=paper.id,
+                            paper_id=paper.id,
+                            short_moniker=moniker,
+                            filename="",
+                            title=display_title,
+                            novelty=result.novelty_delta,
+                        )
+                    )
                 stats.total += 1
 
             logger.info(
