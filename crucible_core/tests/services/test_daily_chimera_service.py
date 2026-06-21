@@ -7,7 +7,11 @@ import asyncio
 from pathlib import Path
 
 from src.crucible.core.schemas import BatchFilterStats, BatchMustReadItem
-from src.crucible.services.daily_chimera_service import _collect_must_read_lines
+from src.crucible.services.daily_chimera_service import (
+    _collect_all_filtered_lines,
+    _collect_must_read_lines,
+    _collect_pipeline_artifacts,
+)
 
 
 def _item(**kwargs) -> BatchMustReadItem:
@@ -32,6 +36,51 @@ def test_collect_falls_back_to_title():
 
 def test_collect_empty_stats():
     assert _collect_must_read_lines(BatchFilterStats()) == []
+
+
+# --- HSC-2 scenario: 0 must_read / 1 skim / 2 reject ---
+
+def _make_stats_0mr_1skim_2reject() -> BatchFilterStats:
+    skim = _item(score=6, id="2501.00001", paper_id="2501.00001", short_moniker="SkimNet", filename="2501.00001-SkimNet.md")
+    r1 = _item(score=2, id="2501.00002", paper_id="2501.00002", short_moniker="TrashA", filename="")
+    r2 = _item(score=1, id="2501.00003", paper_id="2501.00003", short_moniker="TrashB", filename="")
+    return BatchFilterStats(
+        total=3, must_read=0, skim=1, reject=2,
+        skim_items=[skim],
+        reject_items=[r1, r2],
+    )
+
+
+def test_all_filtered_lines_lists_all_verdicts():
+    stats = _make_stats_0mr_1skim_2reject()
+    section = _collect_all_filtered_lines(stats)
+    assert "SkimNet" in section
+    assert "TrashA" in section
+    assert "TrashB" in section
+    assert "Skim:" in section
+    assert "Reject:" in section
+    assert "Must Read:" not in section  # no must_read items
+
+
+def test_all_filtered_lines_empty_when_no_papers():
+    assert _collect_all_filtered_lines(BatchFilterStats()) == ""
+
+
+def test_collect_pipeline_artifacts_skim_only():
+    stats = _make_stats_0mr_1skim_2reject()
+    inbox = Path("/vault/inbox")
+    artifacts = _collect_pipeline_artifacts(stats, inbox)
+    assert len(artifacts) == 1
+    assert artifacts[0].metadata["verdict"] == "skim"
+    assert "Skim" in artifacts[0].path
+    assert "2501.00001" in artifacts[0].path
+    assert artifacts[0].path.endswith(".md")
+
+
+def test_collect_pipeline_artifacts_no_reject_artifacts():
+    stats = _make_stats_0mr_1skim_2reject()
+    artifacts = _collect_pipeline_artifacts(stats, Path("/vault/inbox"))
+    assert all(a.metadata["verdict"] != "reject" for a in artifacts)
 
 
 async def test_convert_worker_processes_serially() -> None:

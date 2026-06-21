@@ -81,6 +81,31 @@ def _collect_must_read_lines(stats: BatchFilterStats) -> list[str]:
     return lines
 
 
+def _collect_all_filtered_lines(stats: BatchFilterStats) -> str:
+    sections = []
+    for header, items in (
+        ("Must Read", stats.must_read_items),
+        ("Skim", stats.skim_items),
+        ("Reject", stats.reject_items),
+    ):
+        if not items:
+            continue
+        lines = []
+        for item in items:
+            paper_id = str(item.id).strip()
+            short_moniker = str(item.short_moniker).strip()
+            legacy_title = str(item.title).strip()
+            if short_moniker:
+                title = f"{paper_id} {short_moniker}".strip() if paper_id else short_moniker
+            elif legacy_title:
+                title = legacy_title
+            else:
+                title = paper_id
+            lines.append(f"  {title} [{item.score}/10]")
+        sections.append(f"{header}:\n" + "\n".join(lines))
+    return "\n".join(sections)
+
+
 def _collect_pipeline_artifacts(
     stats: BatchFilterStats, inbox_folder: Path
 ) -> list[Artifact]:
@@ -94,6 +119,17 @@ def _collect_pipeline_artifacts(
                 kind="vault_note",
                 path=path,
                 metadata={"arxiv_id": item.id, "verdict": "must_read", "score": item.score},
+            )
+        )
+    for item in stats.skim_items:
+        moniker = sanitize_filename(item.short_moniker) if item.short_moniker else ""
+        basename = f"{item.id}-{moniker}" if moniker else sanitize_filename(item.id)
+        path = str(inbox_folder / "Skim" / f"{basename}.md")
+        artifacts.append(
+            Artifact(
+                kind="vault_note",
+                path=path,
+                metadata={"arxiv_id": item.id, "verdict": "skim", "score": item.score},
             )
         )
     return artifacts
@@ -281,9 +317,9 @@ async def _run_pipelined_async(
         f"batch_total={stats.total} must_read={stats.must_read} skim={stats.skim} "
         f"reject={stats.reject} errors={stats.errors} telegram={'no' if skip_telegram else 'yes'}"
     )
-    must_read_lines = _collect_must_read_lines(stats)
-    if must_read_lines:
-        summary += "\nMust Read:\n" + "\n".join(must_read_lines)
+    filtered_section = _collect_all_filtered_lines(stats)
+    if filtered_section:
+        summary += "\n" + filtered_section
     logger.info("[Service] %s", summary)
     return summary, stats
 
