@@ -11,6 +11,8 @@ from src.crucible.core.config import ChimeraConfig, get_config
 from src.crucible.core.schemas import (
     BatchFilterStats,
     BatchMustReadItem,
+    Paper,
+    PaperAnalysisResult,
     VerdictDecision,
 )
 from src.crucible.ports.papers.paper_archive_adapter import PaperArchiveAdapter
@@ -38,6 +40,71 @@ def _resolve_md_papers_dir(settings: ChimeraConfig, md_papers_dir: Path | None) 
         return candidate.resolve()
 
     return settings.paper_miner_or_default.md_papers_dir
+
+
+def _record_verdict_stats(
+    stats: BatchFilterStats,
+    paper: Paper,
+    result: PaperAnalysisResult,
+    output_path: Path | None,
+) -> None:
+    """Mutate ``stats`` in-place from ``result.verdict``. Shared by the sync
+    (``run_batch_filter``) and async (``filter_queue_worker``) paths.
+
+    Lock-agnostic: the caller holds any lock (the async path wraps this call
+    in its ``asyncio.Lock``). Deliberately does NOT touch ``stats.total`` or
+    ``stats.processed_ids`` — the two paths manage those differently (sync
+    counts files once and records ids before evaluation; async increments
+    per-paper and records ids only on success).
+
+    For MUST_READ / SKIM the caller must pass the written note's
+    ``output_path`` (its ``.name`` becomes the item filename); REJECT writes
+    no note, so ``output_path`` may be ``None``.
+    """
+    moniker = result.short_moniker.strip()
+    display_title = f"{paper.id} {moniker}".strip() if moniker else str(paper.id)
+    if result.verdict == VerdictDecision.MUST_READ:
+        stats.must_read += 1
+        assert output_path is not None
+        stats.must_read_titles.append(display_title)
+        stats.must_read_items.append(
+            BatchMustReadItem(
+                score=int(result.score),
+                id=paper.id,
+                paper_id=paper.id,
+                short_moniker=moniker,
+                filename=output_path.name,
+                title=display_title,
+                novelty=result.novelty_delta,
+            )
+        )
+    elif result.verdict == VerdictDecision.SKIM:
+        stats.skim += 1
+        assert output_path is not None
+        stats.skim_items.append(
+            BatchMustReadItem(
+                score=int(result.score),
+                id=paper.id,
+                paper_id=paper.id,
+                short_moniker=moniker,
+                filename=output_path.name,
+                title=display_title,
+                novelty=result.novelty_delta,
+            )
+        )
+    else:
+        stats.reject += 1
+        stats.reject_items.append(
+            BatchMustReadItem(
+                score=int(result.score),
+                id=paper.id,
+                paper_id=paper.id,
+                short_moniker=moniker,
+                filename="",
+                title=display_title,
+                novelty=result.novelty_delta,
+            )
+        )
 
 
 def run_batch_filter(
@@ -82,60 +149,10 @@ def run_batch_filter(
             paper_id_for_cleanup = paper.id
             result = engine.evaluate_paper(paper)
 
-            if result.verdict == VerdictDecision.MUST_READ:
-                stats.must_read += 1
-                moniker = result.short_moniker.strip()
-                display_title = (
-                    f"{paper.id} {moniker}".strip() if moniker else str(paper.id)
-                )
+            output_path: Path | None = None
+            if result.verdict in (VerdictDecision.MUST_READ, VerdictDecision.SKIM):
                 output_path = writer.write_knowledge_node(paper, result)
-                stats.must_read_titles.append(display_title)
-                stats.must_read_items.append(
-                    BatchMustReadItem(
-                        score=int(result.score),
-                        id=paper.id,
-                        paper_id=paper.id,
-                        short_moniker=moniker,
-                        filename=output_path.name,
-                        title=display_title,
-                        novelty=result.novelty_delta,
-                    )
-                )
-            elif result.verdict == VerdictDecision.SKIM:
-                stats.skim += 1
-                output_path = writer.write_knowledge_node(paper, result)
-                moniker = result.short_moniker.strip()
-                display_title = (
-                    f"{paper.id} {moniker}".strip() if moniker else str(paper.id)
-                )
-                stats.skim_items.append(
-                    BatchMustReadItem(
-                        score=int(result.score),
-                        id=paper.id,
-                        paper_id=paper.id,
-                        short_moniker=moniker,
-                        filename=output_path.name,
-                        title=display_title,
-                        novelty=result.novelty_delta,
-                    )
-                )
-            else:
-                stats.reject += 1
-                moniker = result.short_moniker.strip()
-                display_title = (
-                    f"{paper.id} {moniker}".strip() if moniker else str(paper.id)
-                )
-                stats.reject_items.append(
-                    BatchMustReadItem(
-                        score=int(result.score),
-                        id=paper.id,
-                        paper_id=paper.id,
-                        short_moniker=moniker,
-                        filename="",
-                        title=display_title,
-                        novelty=result.novelty_delta,
-                    )
-                )
+            _record_verdict_stats(stats, paper, result, output_path)
             router.route_and_cleanup(paper, result)
         except Exception as exc:
             stats.errors += 1
@@ -196,60 +213,7 @@ async def filter_queue_worker(
 
             async with stats_lock:
                 stats.processed_ids.append(paper.id)
-                if result.verdict == VerdictDecision.MUST_READ:
-                    stats.must_read += 1
-                    moniker = result.short_moniker.strip()
-                    display_title = (
-                        f"{paper.id} {moniker}".strip() if moniker else str(paper.id)
-                    )
-                    assert output_path is not None
-                    stats.must_read_titles.append(display_title)
-                    stats.must_read_items.append(
-                        BatchMustReadItem(
-                            score=int(result.score),
-                            id=paper.id,
-                            paper_id=paper.id,
-                            short_moniker=moniker,
-                            filename=output_path.name,
-                            title=display_title,
-                            novelty=result.novelty_delta,
-                        )
-                    )
-                elif result.verdict == VerdictDecision.SKIM:
-                    stats.skim += 1
-                    moniker = result.short_moniker.strip()
-                    display_title = (
-                        f"{paper.id} {moniker}".strip() if moniker else str(paper.id)
-                    )
-                    assert output_path is not None
-                    stats.skim_items.append(
-                        BatchMustReadItem(
-                            score=int(result.score),
-                            id=paper.id,
-                            paper_id=paper.id,
-                            short_moniker=moniker,
-                            filename=output_path.name,
-                            title=display_title,
-                            novelty=result.novelty_delta,
-                        )
-                    )
-                else:
-                    stats.reject += 1
-                    moniker = result.short_moniker.strip()
-                    display_title = (
-                        f"{paper.id} {moniker}".strip() if moniker else str(paper.id)
-                    )
-                    stats.reject_items.append(
-                        BatchMustReadItem(
-                            score=int(result.score),
-                            id=paper.id,
-                            paper_id=paper.id,
-                            short_moniker=moniker,
-                            filename="",
-                            title=display_title,
-                            novelty=result.novelty_delta,
-                        )
-                    )
+                _record_verdict_stats(stats, paper, result, output_path)
                 stats.total += 1
 
             logger.info(
