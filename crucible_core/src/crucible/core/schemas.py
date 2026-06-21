@@ -349,6 +349,8 @@ class BatchFilterStats(BaseModel):
     processed_ids: list[str] = Field(default_factory=list)
     must_read_titles: list[str] = Field(default_factory=list)
     must_read_items: list[BatchMustReadItem] = Field(default_factory=list)
+    skim_items: list[BatchMustReadItem] = Field(default_factory=list)
+    reject_items: list[BatchMustReadItem] = Field(default_factory=list)
     source_dir: Path | None = None
 
 
