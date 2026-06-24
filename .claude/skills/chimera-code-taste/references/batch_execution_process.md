@@ -41,7 +41,11 @@ Apply edits via Edit (use replace_all for repeated literals). Never reconstruct 
 </step>
 
 <step n="4">
-Spawn subagent (Haiku) to run check_taste.ps1 + pytest. Receive structured summary.
+Spawn subagent (Haiku) to run check_taste.ps1 on the edited files (it runs
+ruff + mypy + impacted pytest). The subagent returns the verbatim last 10 lines
+of output + the script's exit code (per the subagent return contract). The main
+session reads the exit code: 0 = pass, non-zero = fail. Do not trust a prose
+"looks good" — the exit code is authoritative.
 </step>
 
 <step n="5">

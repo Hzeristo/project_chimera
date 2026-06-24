@@ -68,7 +68,12 @@ Do NOT spawn subagent for:
 - Reading source files for editing context
 - Self-check rule application (the rule application IS the reasoning)
 
-Subagents return only: pass/fail, failure summaries, file:line of violations.
+Subagent return contract (verification tasks): the subagent MUST return the
+verbatim last 10 lines of check_taste.ps1 output AND the script's exit code.
+The main session decides pass/fail from the **exit code alone** (0 = pass,
+non-zero = fail) — never from the subagent's prose. A paraphrased summary may
+accompany the tail for context, but it is NOT authoritative; the exit code is.
+For non-verification scans, subagents return file:line of violations.
 </subagent_routing>
 
 <core_principles>
