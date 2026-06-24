@@ -49,10 +49,20 @@ session reads the exit code: 0 = pass, non-zero = fail. Do not trust a prose
 </step>
 
 <step n="5">
-If self-check reveals red-line violation:
+HALT conditions — if EITHER holds, do NOT commit this sprint:
+
+a) check_taste exit code ≠ 0 (ruff / mypy / impacted pytest failed):
+  - Do NOT commit this sprint — a sprint that does not verify cannot be sealed
+  - Output the verbatim failing tail + exit code + which sprint
+  - HALT and surface to user
+
+b) Red-line violation (forbidden pattern from sprint / phase red lines):
   - HALT entire batch
   - Output violation summary + which sprint failed
   - Do NOT proceed to next sprint
+
+Do NOT silently bypass either. "Green" is proven by exit code 0, not asserted.
+A test/lint failure (a) is NOT a red line, but it blocks the commit just the same.
 </step>
 
 <step n="6">
