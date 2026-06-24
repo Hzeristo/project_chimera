@@ -13,7 +13,7 @@ Chimera is a **personal research OS** for one user. Not a SaaS, not a framework,
 
 - **Not a framework.** Frameworks optimize for generality across unknown users. Chimera optimizes for fit to one user.
 - **Not a Claude Code clone.** Claude Code serves developers-at-large. Chimera serves academic research.
-- **Not an OpenClaw clone.** Opneclaw act as general purpose OS agent. Chimera is a dedicated research OS.
+- **Not an OpenClaw clone.** OpenClaw acts as a general-purpose OS agent. Chimera is a dedicated research OS.
 - **Not SOTA chasing.** Chimera is "2024.5 architecture" — mature tech combined with novel integration, not bleeding-edge "2026.5" papers.
 
 ## Core Principles
@@ -32,6 +32,9 @@ Chimera is a **personal research OS** for one user. Not a SaaS, not a framework,
 - Read SOTA papers for **architectural insights**, not implementation blueprints.
 - Copy the idea (e.g., Context-Folding's branch/return), discard the prompt templates and benchmark-specific details.
 - Every SOTA borrow should ask: "What vulnerability does this paper not solve, and do we care about that vulnerability?"
+- This section owns the *principle*. For the operational adopt/reject procedure
+  (friction check → ~100-line reimplementation → file to `docs/plunder_list.md`),
+  see `chimera-dependency-veto` → "The SOTA Paper Test", which owns the test.
 
 ### Lightweight Over Comprehensive
 - Single-user means we can skip:
@@ -60,4 +63,4 @@ If adding a capability feels like it's moving Chimera toward a framework shape, 
 
 > "Does this solve a logged friction, or is it anticipating a problem the user doesn't have yet?"
 
-Anticipated problems belong in `Phase IV` placeholder docs, not in the current sprint.
+Anticipated problems belong in future-phase placeholder docs or `docs/plunder_list.md` (which now exists), not in the current sprint.
