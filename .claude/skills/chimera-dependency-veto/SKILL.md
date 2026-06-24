@@ -19,7 +19,7 @@ Before proposing any new dependency or external framework integration, check thi
 
 ### Data Infrastructure
 - **Redis / Kafka / RabbitMQ**: message queues for distributed systems. Chimera uses `asyncio.Queue` and persistent JSON.
-- **Vector databases (Pinecone, Weaviate, Qdrant)**: until Phase IV Exocortex, no semantic search is needed. And Phase IV will likely use `chromadb` (pure Python, no service).
+- **Vector databases (Pinecone, Weaviate, Qdrant)**: until Phase V Exocortex (V.A sealed 2026-06-16), no semantic search is needed. And Phase V will likely use `chromadb` (pure Python, no service).
 
 ### Security
 - **OAuth libraries, sandbox runtimes**: single-user local app. Trust boundary is the OS user account.
