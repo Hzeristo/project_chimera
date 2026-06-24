@@ -74,6 +74,7 @@ Use one of these scope tags:
 - `vault` — Obsidian vault adapters
 - `tools` — oligo tools
 - `docs` — documentation only
+- `skill` — `.claude/skills/` changes (skill specs, references, assets)
 - `tests` — test-only changes
 - `chore` — build / config / dependency updates
 - `deps` — dependency additions (requires justification, see `chimera-dependency-veto`)
