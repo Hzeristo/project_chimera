@@ -5,10 +5,9 @@ allowed-tools:
   - Read
   - Grep
   - Glob
-  - TodoWrite
-  - Task
+  - TaskCreate
+  - Agent
   - PowerShell(git log:*, git diff:*, git status:*, git show:*, Get-Content docs/*:*)
-  # NEW: append-only writes to state files (phase_review mode only)
   - Edit  # required for status field flips
   - PowerShell(*Out-File -Append*docs/ACCEPTED_PARTIALS.md*)
   - PowerShell(*Out-File -Append*docs/TECHNICAL_DEBT.md*)
@@ -31,7 +30,6 @@ HARD STOP if any are missing. Output diagnosis, do not proceed.
 
 <expected_model>
 This skill operates in three modes with different reasoning intensity.
-Bootstrap MUST verify model and warn if mismatched.
 
 | Mode | Recommended | Acceptable | Wasteful |
 |---|---|---|---|
@@ -69,7 +67,6 @@ AUTO-APPLY (no user approval required):
 - Append to docs/ACCEPTED_PARTIALS.md
 - Append to docs/TECHNICAL_DEBT.md
 - Flip friction status SCHEDULED → RESOLVED for current phase frictions
-- Delete docs/phases/{phase}/_progress.md after seal
 
 PROPOSE-DIFF (user approval required):
 - docs/ROADMAP.md
@@ -87,7 +84,7 @@ batch_planning modes remain read-only as before.
 </state_write_authority>
 
 <subagent_routing>
-Spawn subagents (Task tool, general-purpose, model: Haiku) for:
+Spawn subagents (Agent tool, general-purpose, model: Haiku) for:
 - Repo-wide pattern scans (Select-String / Grep across many files)
 - Migration drift detection (broken imports, missing files)
 - Test/lint output parsing
@@ -109,6 +106,7 @@ Subagents return structured summaries, never verbatim file contents.
 </core_principles>
 
 <execution_environment>
+<!-- SYNC: duplicated in chimera-code-taste, manual sync needed -->
 Project Chimera development host: Windows.
 Tool invocations use the PowerShell tool (pwsh 7+), NOT Bash.
 
@@ -142,6 +140,7 @@ Construct correct syntax on first attempt. No POSIX-then-retry pattern.
 </execution_environment>
 
 <incident_protocol>
+<!-- SYNC: duplicated in chimera-code-taste, manual sync needed -->
 An incident is a clear-cut code defect (regression, crash, parse failure)
 that is immediately diagnosable and fixable. It is NOT a friction (workflow
 pain) nor tracked debt (known deferred work).

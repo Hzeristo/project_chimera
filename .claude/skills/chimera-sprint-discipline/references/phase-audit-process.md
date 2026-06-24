@@ -40,8 +40,9 @@ Output using assets/phase-audit-template.md. Write to docs/audits/{prerequisite-
 (e.g., `docs/audits/FC.0.md` when the phase's first read-only sprint is FC.0).
 
 The audit is named for the sprint that authors it, typically the phase's first
-read-only sprint. There is no separate phase-level audit artifact — the prerequisite
-sprint IS the audit.
+read-only sprint. The general pattern is `docs/audits/{phase}.0.md` (e.g.
+`docs/audits/FC.0.md` for Phase III.C, `docs/audits/V.A.0.md` for Phase V.A).
+There is no separate phase-level audit artifact — the prerequisite sprint IS the audit.
 </step>
 
 ## Success Criteria

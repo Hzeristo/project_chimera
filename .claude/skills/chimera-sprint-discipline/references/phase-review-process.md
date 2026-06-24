@@ -11,8 +11,8 @@ A halted batch with documented Accepted Partials may still be a successful revie
 
 ## Hard Preconditions
 
-1. Phase audit exists at `docs/audits/{prerequisite-sprint-id}.md` (e.g., `docs/audits/FC.0.md`)
-2. Batch plan exists at `docs/plans/{phase}-batch.md` (e.g., `docs/plans/Phase-III.C-batch.md`)
+1. Phase audit exists at `docs/audits/{prerequisite-sprint-id}.md` (general pattern `docs/audits/{phase}.0.md` — e.g. `docs/audits/FC.0.md` for Phase III.C, `docs/audits/V.A.0.md` for Phase V.A)
+2. Batch plan exists at `docs/plans/Phase-{X.Y}-batch.md` (capital P on disk, e.g., `docs/plans/Phase-III.C-batch.md`)
 3. Batch execution has completed (or halted) — at least one sprint commit exists
 4. User explicitly invoked review (not auto-triggered after batch_execution)
 
@@ -21,8 +21,9 @@ If any precondition fails, STOP. Output diagnosis. Do not proceed.
 ## Steps
 
 <step n="0">
-Read `docs/phases/phase-{X.Y}/_progress.md` to recover full session history
-across the batch. Extract:
+Read `docs/sprints/phase-{X.Y}/*.md` summaries to recover batch history
+across the session(s). These per-sprint summaries are the source of truth.
+Extract:
 - Per-sprint completion order + commits
 - Accepted Partials accumulated
 - Process drift observations
@@ -61,7 +62,7 @@ For each completed sprint, verify acceptance criteria via Grep / pytest output /
 Spawn subagent (Haiku) for repo-wide red-line scans:
 
 ```
-Task(
+Agent(
   subagent_type="general-purpose",
   prompt="Grep for forbidden patterns across src/: 'except BaseException', 'TOOL_REGISTRY[', any other red lines from phase-{X.Y}.md. Return file:line of any matches."
 )
@@ -120,7 +121,6 @@ Apply state file updates by category:
 - ACCEPTED_PARTIALS.md: append new partials with full context
 - TECHNICAL_DEBT.md: append new DEBT-{id} entries
 - friction-*.md: flip status SCHEDULED → RESOLVED for entries this phase resolved
-- Phase-progress _progress.md: delete after seal (per step N+1)
 
 **Propose diff for user approval (decision-bearing):**
 - ROADMAP.md phase status (Active → Sealed / Functionally Sealed)
@@ -142,8 +142,6 @@ For propose-diff category:
 <step n="N+1">
 After phase_review verdict accepted by user:
 - Verify all per-sprint summaries exist in docs/sprints/phase-{X.Y}/
-- Delete docs/phases/phase-{X.Y}/_progress.md (transient artifact)
-- The directory may keep other phase-specific notes but progress is cleaned
 </step>
 
 
@@ -190,4 +188,4 @@ Frictions:
 - [ ] Sealing decision unambiguous (Sealed / Functionally Sealed / NOT Sealed)
 - [ ] Proposed diffs for state files output as unified diff
 - [ ] No code modifications attempted
-- [ ] No state files directly written (proposals only)
+- [ ] State files written per spec, all staged, zero commits

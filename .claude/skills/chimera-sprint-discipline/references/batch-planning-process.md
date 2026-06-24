@@ -8,7 +8,7 @@ The mitigation: sprint dependencies explicit, predecessor assumptions named.
 </key_insight>
 
 ## Hard Preconditions
-1. Phase audit complete at docs/audits/{prerequisite-sprint-id}.md (e.g., `docs/audits/FC.0.md`)
+1. Phase audit complete at docs/audits/{prerequisite-sprint-id}.md (general pattern `docs/audits/{phase}.0.md` — e.g. `docs/audits/FC.0.md`, `docs/audits/V.A.0.md`)
 2. Phase doc declares sprint name list (sparse manifest)
 3. ROADMAP.md + docs/logs/friction-*.md confirm phase is current active
 
@@ -40,7 +40,10 @@ Mark these and reduce their scope accordingly.
 
 <step n="5">
 Output sprint sequence using assets/batch-plan-template.md.
-Write to `docs/plans/{phase}-batch.md` (e.g., `docs/plans/Phase-III.C-batch.md`).
+Write to `docs/plans/{phase}-batch.md`, where `{phase}` is capital-P on disk:
+`Phase-{X.Y}-batch.md` (e.g. `docs/plans/Phase-III.C-batch.md`, `docs/plans/Phase-V.A-batch.md`).
+Note the case asymmetry: phase DOCS are lowercase (`docs/phases/phase-{X.Y}.md`)
+but phase PLANS are capital-P (`docs/plans/Phase-{X.Y}-batch.md`). Match disk reality.
 The sequence is a single document — user approves whole or rejects whole.
 
 Note: the batch plan is a distinct artifact from the phase doc.
