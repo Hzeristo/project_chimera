@@ -30,7 +30,7 @@ chore: bump test fixtures
 For sprint-level changes spanning 2-3 related files, or when "why" matters more than "what".
 
 ```
-feat(agent): tool result reflection hints
+feat(oligo): tool result reflection hints
 
 - structured <tool_result status=.../> wrapping
 - EMPTY_RESULT fallback suggestion
