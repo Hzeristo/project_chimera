@@ -119,16 +119,14 @@ State and conventions are documented under `docs/` — a project memory layer
 
 ## Status
 
-| Phase | Theme | State |
-|---|---|---|
-| I | Foundation — error handling, config unification, observability | Sealed |
-| II | Cognition — skills, tools, wash, metrics, dogfooding | Sealed |
-| III.A | Connection — task progress, pipeline tooling | Sealed |
-| III.B | Middleware & Harness — prompt composer, tool protocol, intent | Sealed |
-| III.C | Structured Final Contract — tool artifacts, vault links | Sealed |
-| EXT | Prompt externalization & router rewrite | Sealed |
-| III.E | Orchestration primitives — subagent, archival, babysitting | Planned |
-| IV | Exocortex — node templates, ARA bridge, Claude Code task bridge | Planned |
+Sealed through Phase V.A: the agent core is async (long-running tasks
+suspend and resume on real completion instead of fabricating an answer),
+and the Exocortex node ontology, staging protocol, and vault query are in
+place. Next: an end-to-end smoke pass and a Use Week, then the next Phase V
+sprint.
+
+For the authoritative per-phase breakdown — sealed, planned, or deferred —
+see [`docs/ROADMAP.md`](docs/ROADMAP.md).
 
 This is a system under active, single-developer construction. It is built
 to be used for four years, not shipped.
