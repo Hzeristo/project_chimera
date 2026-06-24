@@ -6,9 +6,8 @@ allowed-tools:
   - Grep
   - Glob
   - Edit
-  - MultiEdit
   - Write
-  - Task
+  - Agent
   - PowerShell(pytest:*, ruff:*, mypy:*, git diff:*, git show:*, git status:*, ./scripts/check_taste.ps1:*)
 ---
 
@@ -41,7 +40,7 @@ red lines and file scope, so execution does not need cross-cutting reasoning.
 | Operation | Recommended | Acceptable | Wasteful |
 |---|---|---|---|
 | Reading source for context | Sonnet | Opus | Haiku (insufficient) |
-| Editing code (Edit/MultiEdit) | Sonnet | Opus (large refactor) | Haiku (insufficient) |
+| Editing code (Edit, replace_all) | Sonnet | Opus (large refactor) | Haiku (insufficient) |
 | Running pytest/ruff/mypy in subagent | Haiku | Sonnet | Opus (5x cost overrun) |
 
 On activation, if current model is Opus:
@@ -54,18 +53,18 @@ On activation, if current model is Opus:
 
   Wait for confirmation.
 
-Subagent verification tasks should use Haiku via Task tool with
-{model: "claude-haiku-4-5"} parameter (or whichever Haiku version is current).
+Subagent verification tasks should use Haiku via Agent tool with
+{model: "haiku"} parameter (or a current Haiku model id).
 </expected_model>
 
 <subagent_routing>
-Spawn subagents (Task tool, general-purpose, model: Haiku) for:
+Spawn subagents (Agent tool, general-purpose, model: Haiku) for:
 - Running check_taste.ps1 and parsing output
 - Running pytest suite and summarizing failures
 - Cross-file rule violation scanning
 
 Do NOT spawn subagent for:
-- Editing code (Edit/MultiEdit/Write must be main session)
+- Editing code (Edit/Write must be main session)
 - Reading source files for editing context
 - Self-check rule application (the rule application IS the reasoning)
 
@@ -82,6 +81,7 @@ Subagents return only: pass/fail, failure summaries, file:line of violations.
 </core_principles>
 
 <execution_environment>
+<!-- SYNC: duplicated in chimera-sprint-discipline, manual sync needed -->
 Project Chimera development host: Windows.
 Tool invocations use the PowerShell tool (pwsh 7+), NOT Bash.
 
@@ -115,6 +115,7 @@ Construct correct syntax on first attempt. No POSIX-then-retry pattern.
 </execution_environment>
 
 <incident_protocol>
+<!-- SYNC: duplicated in chimera-sprint-discipline, manual sync needed -->
 An incident is a clear-cut code defect (regression, crash, parse failure)
 that is immediately diagnosable and fixable. It is NOT a friction (workflow
 pain) nor tracked debt (known deferred work).
@@ -137,7 +138,7 @@ an isolated bug.
 </incident_protocol>
 
 <rules_summary>
-Full rules with bad/good examples: references/taste-rules.md, references/anti-patterns.md, references/ui-design-tokens.md.
+Full rules with bad/good examples: references/taste_rules.md, references/anti_patterns.md, references/ui_design_tokens.md.
 
 **Quick do:**
 - Read files in full before editing

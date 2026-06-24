@@ -16,13 +16,14 @@ Trust comes from per-sprint commit isolation, not from per-sprint approval.
 For each sprint in batch order:
 
 <step n="0">
-Read `docs/phases/phase-{X.Y}/_progress.md` if exists.
+Read `docs/sprints/phase-{X.Y}/*.md` summaries if any exist. These per-sprint
+summaries are the batch-history source of truth (no separate progress cache).
 
-If exists: identify last completed sprint and assumed resumption point.
+If summaries exist: identify last completed sprint and assumed resumption point.
 Verify predecessor assumptions hold via Git log + targeted Greps.
 If holds → resume from next sprint. If broken → halt and surface to user.
 
-If not exists: this is a fresh batch start. Create the file with header.
+If none exist: this is a fresh batch start.
 </step>
 
 
@@ -36,7 +37,7 @@ Grep call sites of any function planned to modify.
 </step>
 
 <step n="3">
-Apply edits via Edit/MultiEdit. Never reconstruct via Write.
+Apply edits via Edit (use replace_all for repeated literals). Never reconstruct via Write.
 </step>
 
 <step n="4">
@@ -53,9 +54,9 @@ If self-check reveals red-line violation:
 <step n="6">
 If self-check passes:
   - Write sprint summary to `docs/sprints/phase-{X.Y}/{sprint-id}.md`
-  - **Append progress entry to `docs/phases/phase-{X.Y}/_progress.md`**
-    (one line: status + commit hash + accepted partials)
-  - Stage all sprint files + summary + progress entry
+    (include status + commit hash + accepted partials — this summary IS the
+     batch-history record phase_review reads back at seal time)
+  - Stage all sprint files + summary
   - Commit with Tier-2 message
   - Proceed to next sprint
 </step>
@@ -64,7 +65,8 @@ If self-check passes:
 Session boundary trigger: when context usage exceeds ~70% OR user explicitly
 invokes "session pause":
 
-  1. Append session-boundary entry to `docs/phases/phase-{X.Y}/_progress.md`:
+  1. Record session-boundary context in the last completed sprint's summary
+     (`docs/sprints/phase-{X.Y}/{sprint-id}.md`):
      - Sprints completed this session
      - Cumulative accepted partials this session
      - Process drift observations (e.g., hitched commits)
@@ -73,7 +75,7 @@ invokes "session pause":
   3. Hand off — do NOT continue past boundary in same session
 
 The next session bootstraps with `/clear`-equivalent (new session) and
-reads progress file at step 0 above.
+reads the sprint summaries at step 0 above.
 </step>
 
 
