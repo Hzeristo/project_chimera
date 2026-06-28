@@ -17,6 +17,10 @@ Three folders answer three different questions. None substitutes for another.
 | `docs/audits/{prereq-sprint-id}.md` | right or wrong | VERDICT |
 | `docs/plans/Phase-{X.Y}-batch.md` | how (derived from the audit) | PLAN |
 
+Audits are usually **pre-sprint** — the read-only prerequisite that planning
+builds on. Exceptions exist: `audits/` also holds post-hoc and topic audits
+(e.g. a debt-week or perf audit run after the fact).
+
 ## Read / write authority
 
 | Folder | chimera-sprint-discipline | chimera-code-taste |
@@ -30,6 +34,13 @@ Neither skill writes `phases/`; it is user-authored intent. Source code and
 architecture docs are written only by code-taste, within sprint scope. State
 files (ROADMAP / ACCEPTED_PARTIALS / TECHNICAL_DEBT / friction logs) follow
 chimera-sprint-discipline's own `state_write_authority`, not this table.
+
+## Autonomy
+These folders are skill **outputs**, written autonomously — no per-write human
+approval: batch_planning writes `plans/`, batch_execution writes `sprints/`,
+phase_audit saves to `audits/`. The one human-authored **input** is `phases/`
+(intent) — skills read it, only humans write it. State files are the separate,
+partially-gated case (see `state_write_authority`).
 
 ## Why the separation matters
 The workflows depend on these staying distinct: planning reads the audit
