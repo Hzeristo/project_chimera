@@ -8,7 +8,7 @@ allowed-tools:
   - Edit
   - Write
   - Agent
-  - PowerShell(pytest:*, ruff:*, mypy:*, git diff:*, git show:*, git status:*, ./scripts/check_taste.ps1:*)
+  - PowerShell(pytest:*, ruff:*, mypy:*, git diff:*, git show:*, git status:*, .claude/skills/chimera-code-taste/scripts/check_taste.ps1:*)
 ---
 
 <skill_identity>
