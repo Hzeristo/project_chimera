@@ -30,14 +30,16 @@ HARD STOP if any are missing. Output diagnosis, do not proceed.
 
 <expected_model>
 This skill operates in three modes with different reasoning intensity.
-Recommendation procedure (detect → inform → wait, never auto-switch):
-see ../_shared/expected_model.md.
 
 | Mode | Recommended | Acceptable | Wasteful |
 |---|---|---|---|
 | phase_audit | Opus | Sonnet | Haiku (insufficient) |
 | batch_planning | Opus | Sonnet (if audit recent) | Haiku (insufficient) |
 | phase_review | Opus (phase seal) | Sonnet (mid-batch only) | Haiku (insufficient) |
+
+On activation, if the current model is Wasteful (or higher-than-needed) for the
+selected mode, follow the recommendation procedure BEFORE any other work
+(detect → inform → wait, never auto-switch): see ../_shared/expected_model.md.
 </expected_model>
 
 <invocation_modes>
