@@ -19,7 +19,7 @@ Pointer only — `docs/ROADMAP.md` is authoritative, do not treat this as a seco
 ## Skills
 1. `chimera-core-philosophy` — always active
 2. `chimera-sprint-discipline` — planning / reviewing
-3. `chimera-code-taste` — writing / editing code
+3. `chimera-code-taste` — batch sprint execution (code/UI taste)
 4. `chimera-dependency-veto` — adding dependencies
 5. `chimera-commit-style` — drafting commits
 
