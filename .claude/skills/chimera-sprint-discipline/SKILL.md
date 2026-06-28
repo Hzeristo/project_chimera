@@ -70,10 +70,20 @@ NEVER WRITE in any mode:
 - Skill files themselves
 - Source code (handed to chimera-code-taste)
 - Architecture docs (chimera-code-taste only, in sprint scope)
+- docs/phases/* (user-authored phase intent)
+- docs/sprints/* (execution record — chimera-code-taste owns it)
 
 This authority exists ONLY in phase_review mode. phase_audit and
 batch_planning modes remain read-only as before.
 </state_write_authority>
+
+<doc_folders>
+Phase record = sprints + audits. This skill READS docs/phases/ (intent, never
+written here), WRITES docs/audits/ (phase_audit) and docs/plans/ (batch_planning),
+and READS docs/sprints/ (phase_review batch history — code-taste owns the writes).
+Full R/W table + the missing-record fallback: see ../_shared/doc_folders.md;
+conceptual model in CLAUDE.md ("Source of truth").
+</doc_folders>
 
 <subagent_routing>
 Generic delegation policy (Haiku for scans, structured returns, prose is never

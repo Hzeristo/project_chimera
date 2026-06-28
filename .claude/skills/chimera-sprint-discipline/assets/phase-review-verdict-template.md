@@ -1,9 +1,10 @@
 # Phase Review Verdict: Phase {X.Y} — {phase_name}
 
-**Audit reference:** `docs/audits/{prerequisite-sprint-id}.md` (e.g., `docs/audits/FC.0.md`)
-**Batch plan reference:** `docs/plans/{phase}-batch.md` (e.g., `docs/plans/Phase-III.C-batch.md`)
+**Audit reference:** `docs/audits/{prerequisite-sprint-id}.md` (e.g., `docs/audits/IV.A.0.md`)
+**Batch plan reference:** `docs/plans/Phase-{X.Y}-batch.md` (e.g., `docs/plans/Phase-IV.A-batch.md`)
 **Sprints in batch:** {sprint_id_1}, {sprint_id_2}, ..., {sprint_id_N}
 **Sprints completed:** {n} of {total}
+**Batch history source:** sprint summaries (`docs/sprints/phase-{X.Y}/`) — or "reconstructed from phase doc" if the sprint dir was missing/empty
 **Date:** YYYY-MM-DD
 
 ---

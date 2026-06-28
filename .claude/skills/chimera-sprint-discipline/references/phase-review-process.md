@@ -22,12 +22,20 @@ If any precondition fails, STOP. Output diagnosis. Do not proceed.
 
 <step n="0">
 Read `docs/sprints/phase-{X.Y}/*.md` summaries to recover batch history
-across the session(s). These per-sprint summaries are the source of truth.
+across the session(s). These per-sprint summaries are the execution record —
+the source of truth for what was done (see ../../_shared/doc_folders.md).
 Extract:
 - Per-sprint completion order + commits
 - Accepted Partials accumulated
 - Process drift observations
 - Session boundaries (for cross-session consistency check)
+
+Fallback — if `docs/sprints/phase-{X.Y}/` does not exist or is empty (e.g. a
+phase sealed before the per-sprint-summary protocol existed):
+- Reconstruct batch history from the sprint list in `docs/phases/phase-{X.Y}.md`
+  (intent), cross-checked against `git log`.
+- Mark the verdict "reconstructed" — the evidence base is weaker, so say so
+  explicitly rather than presenting it as a full record.
 </step>
 
 
@@ -53,7 +61,7 @@ Read batch plan to recover declared red lines and acceptance criteria per sprint
 
 ```
 Read("docs/audits/{prerequisite-sprint-id}.md")
-Read("docs/plans/{phase}-batch.md")
+Read("docs/plans/Phase-{X.Y}-batch.md")
 ```
 </step>
 

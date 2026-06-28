@@ -85,6 +85,14 @@ For non-verification scans, subagents return file:line of violations.
 6. **Halt on red line** — first sprint in batch that violates a red line stops the entire batch.
 </core_principles>
 
+<doc_folders>
+Phase record = sprints + audits. This skill WRITES `docs/sprints/phase-{X.Y}/{sprint-id}.md`
+(the execution record, at each commit) and READS `docs/phases/phase-{X.Y}.md`
+(red lines / acceptance) and `docs/plans/Phase-{X.Y}-batch.md` (sprint scope).
+It never writes phases/, plans/, or audits/. Full R/W spec: ../_shared/doc_folders.md;
+conceptual model in CLAUDE.md ("Source of truth").
+</doc_folders>
+
 <execution_environment>
 Host is Windows — use the PowerShell tool (pwsh 7+), NOT Bash. Full idiom list
 and forbidden POSIX syntax: see ../_shared/execution_environment.md (single
