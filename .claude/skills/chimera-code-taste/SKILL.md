@@ -73,6 +73,7 @@ verbatim last 10 lines of check_taste.ps1 output AND the script's exit code.
 The main session decides pass/fail from the **exit code alone** (0 = pass,
 non-zero = fail) — never from the subagent's prose. A paraphrased summary may
 accompany the tail for context, but it is NOT authoritative; the exit code is.
+A missing or non-integer exit code is treated as FAIL (halt), never as pass.
 For non-verification scans, subagents return file:line of violations.
 </subagent_routing>
 

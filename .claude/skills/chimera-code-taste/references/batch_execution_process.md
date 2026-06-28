@@ -11,6 +11,8 @@ Trust comes from per-sprint commit isolation, not from per-sprint approval.
 2. User has explicitly invoked "execute batch" / "run FC.N..M"
 3. Python env path declared in CLAUDE.md (for verification commands)
 
+If any precondition fails, STOP. Output diagnosis. Do not proceed.
+
 ## Per-Sprint Loop
 
 For each sprint in batch order:
@@ -41,17 +43,15 @@ Apply edits via Edit (use replace_all for repeated literals). Never reconstruct 
 </step>
 
 <step n="4">
-Spawn subagent (Haiku) to run check_taste.ps1 on the edited files (it runs
-ruff + mypy + impacted pytest). The subagent returns the verbatim last 10 lines
-of output + the script's exit code (per the subagent return contract). The main
-session reads the exit code: 0 = pass, non-zero = fail. Do not trust a prose
-"looks good" — the exit code is authoritative.
+Run check_taste.ps1 on the edited files (it runs ruff + mypy + impacted pytest)
+per the subagent return contract in SKILL.md. That contract is authoritative:
+decide pass/fail from the exit code (0 = pass, non-zero = fail), never from prose.
 </step>
 
 <step n="5">
 HALT conditions — if EITHER holds, do NOT commit this sprint:
 
-a) check_taste exit code ≠ 0 (ruff / mypy / impacted pytest failed):
+a) check_taste exit code ≠ 0, or missing / non-integer (ruff / mypy / impacted pytest failed, or no trustworthy exit code returned):
   - Do NOT commit this sprint — a sprint that does not verify cannot be sealed
   - Output the verbatim failing tail + exit code + which sprint
   - HALT and surface to user
@@ -71,7 +71,9 @@ If self-check passes:
     (include status + commit hash + accepted partials — this summary IS the
      batch-history record phase_review reads back at seal time)
   - Stage all sprint files + summary
-  - Commit with Tier-2 message
+  - Commit with Tier-2 message. If the commit fails (hook rejection, empty diff,
+    etc.), HALT — do not proceed to the next sprint, and do not leave the summary
+    recording a commit that did not happen.
   - Proceed to next sprint
 </step>
 
