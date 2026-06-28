@@ -43,6 +43,23 @@ Beyond the crates, a few directories that aren't self-evident:
 - `crucible_core/prompts/obsidian_tpl/` — K/T/I/D node templates (Knowledge / Thought /
   Insight / Decision) as Jinja2; source of truth the vault `templates/` is synced from.
 
+### Source of truth: phases / sprints / audits
+A phase's record = **sprints + audits**. The folders answer different questions —
+do not treat one as a substitute for another:
+- `docs/phases/phase-{X.Y}.md` — **intent** ("what to do"): sparse manifest of
+  sprint names + one-line goals. User-authored; skills never auto-write it.
+- `docs/sprints/phase-{X.Y}/{sprint-id}.md` — **execution** ("what was done"):
+  per-sprint summary written by `chimera-code-taste` at each commit. The
+  batch-history source of truth for phase review.
+- `docs/audits/{prereq-sprint-id}.md` — **verdict** ("right or wrong"): the
+  pre-phase audit + review evidence, written by `chimera-sprint-discipline`.
+- `docs/plans/Phase-{X.Y}-batch.md` — the batch plan derived from the audit
+  (capital-P; written by `chimera-sprint-discipline` batch_planning).
+
+If the execution record (`docs/sprints/phase-{X.Y}/`) is missing or empty, fall
+back to phase **intent** to reconstruct batch history and flag the review as
+"reconstructed". Operational R/W spec for skills: `.claude/skills/_shared/doc_folders.md`.
+
 ## Development environment
 
 ### Python (crucible_core)
