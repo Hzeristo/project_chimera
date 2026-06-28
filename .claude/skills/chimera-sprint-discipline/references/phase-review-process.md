@@ -11,8 +11,8 @@ A halted batch with documented Accepted Partials may still be a successful revie
 
 ## Hard Preconditions
 
-1. Phase audit exists at `docs/audits/{prerequisite-sprint-id}.md` (general pattern `docs/audits/{phase}.0.md` — e.g. `docs/audits/FC.0.md` for Phase III.C, `docs/audits/V.A.0.md` for Phase V.A)
-2. Batch plan exists at `docs/plans/Phase-{X.Y}-batch.md` (capital P on disk, e.g., `docs/plans/Phase-III.C-batch.md`)
+1. Phase audit exists at the phase audit path (see references/path_conventions.md)
+2. Batch plan exists at the batch-plan path (capital-P; see references/path_conventions.md)
 3. Batch execution has completed (or halted) — at least one sprint commit exists
 4. User explicitly invoked review (not auto-triggered after batch_execution)
 
@@ -59,14 +59,21 @@ Read("docs/plans/{phase}-batch.md")
 
 <step n="3">
 For each completed sprint, verify acceptance criteria via Grep / pytest output / file inspection.
-Spawn subagent (Haiku) for repo-wide red-line scans:
+
+Run red-line scans DIRECTLY in the main session — do NOT delegate. At seal time
+correctness outranks speed, and a delegated prose result is not authoritative.
+Grep each forbidden pattern declared in `docs/phases/phase-{X.Y}.md` across src/
+yourself:
 
 ```
-Agent(
-  subagent_type="general-purpose",
-  prompt="Grep for forbidden patterns across src/: 'except BaseException', 'TOOL_REGISTRY[', any other red lines from phase-{X.Y}.md. Return file:line of any matches."
-)
+Grep(pattern="except BaseException", path="src", output_mode="content")
+Grep(pattern="TOOL_REGISTRY\\[", path="src", output_mode="content")
+# ...one Grep per declared red line. 0 hits = Held; any hit = Violated (file:line).
 ```
+
+If a scan is genuinely too broad to run inline, a Haiku scout MAY pre-collect raw
+match lines, but the main session MUST re-Grep each flagged file to confirm before
+recording Held/Violated. The scout's summary is never the verdict.
 </step>
 
 <step n="4">
@@ -120,7 +127,7 @@ Apply state file updates by category:
 **Auto-apply (mechanical, no decision):**
 - ACCEPTED_PARTIALS.md: append new partials with full context
 - TECHNICAL_DEBT.md: append new DEBT-{id} entries
-- friction-*.md: flip status SCHEDULED → RESOLVED for entries this phase resolved
+- friction-*.md: flip status OPEN/SCHEDULED → RESOLVED for entries this phase resolved
 
 **Propose diff for user approval (decision-bearing):**
 - ROADMAP.md phase status (Active → Sealed / Functionally Sealed)
@@ -130,7 +137,8 @@ Apply state file updates by category:
 
 For auto-apply category:
 1. Use Edit / PowerShell Out-File -Append per the file's append-only or mutate semantics
-2. Verify by Read after write — confirm entry visible
+2. Verify by Read after write — confirm entry visible. If the Read does NOT show
+   the entry, HALT and surface to user; do not stage a partial or failed write.
 3. Stage but DO NOT commit (user owns commit message for state changes)
 
 For propose-diff category:
@@ -147,37 +155,8 @@ After phase_review verdict accepted by user:
 
 ## Examples
 
-<bad>
-"All sprints commit cleanly. Phase III.C sealed. Updated ROADMAP."
-
-(No file:line evidence. No red line check. No partial categorization.
-No friction status verification. No diff proposed — direct write.)
-</bad>
-
-<good>
-| Sprint | Status | Evidence | Action |
-|---|---|---|---|
-| FC.1 | Pass | search_vault returns ToolOutput at vault_tools.py:78 | - |
-| FC.2 | Accepted Partial | bb-message-artifacts only fires when artifacts non-empty (declared in plan) | Append ACCEPTED_PARTIALS.md |
-| FC.3a | Technical Debt | open_vault_note fallback to system default not tested for non-Obsidian users | DEBT-012 |
-| FC.4 | Pass | test_router_persona_invariance passes at test_prompt_composer.py:340 | - |
-
-Red Lines:
-| OpenAI structured-output API not added | Held | Select-String "response_format" → 0 hits in src/ |
-| artifacts in messages | Held | Select-String "artifacts" in agent.py message-build paths → 0 hits |
-
-Hard Sealing:
-| 3 vault tools return ToolOutput | Pass | vault_tools.py:78,108,141 |
-| artifacts NEVER in messages | Pass | Select-String verified |
-| Router persona-invariant | Pass | test passes |
-
-Frictions:
-| friction-260506 E3 → SCHEDULED → RESOLVED | docs/logs/friction-260506.md:42 |
-| friction-260506 E4 → SCHEDULED → RESOLVED | docs/logs/friction-260506.md:67 |
-
-
-✅ Sealed. 4 Pass, 1 Accepted Partial, 1 Technical Debt filed.
-</good>
+For a worked bad/good verdict, see the appendix of
+`assets/phase-review-verdict-template.md`.
 
 ## Success Criteria
 - [ ] Every sprint in batch has explicit verdict + evidence

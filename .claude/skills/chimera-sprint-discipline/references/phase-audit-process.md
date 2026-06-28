@@ -23,7 +23,19 @@ Ask user for Q list approval (one round of clarification permitted).
 </step>
 
 <step n="3">
-Read every in-scope file in full. Spawn subagent for repo-wide pattern scans.
+Read every in-scope file in full.
+
+Fan out the repo-wide pattern scans: one Haiku scout PER audit question (from
+step 2), spawned in parallel — not one scout for everything.
+
+Each scout receives a spec:
+  { question_id, question, file_globs: [...], patterns: [...] }
+Each scout returns ONLY:
+  { question_id, hits: [ { file, line, snippet } ], risk: "Low|Med|High" }
+
+Dedup before forking: group questions that share file_globs so the same files
+are not re-scanned by multiple scouts. The main session synthesizes hits into
+step-4 answers — scout output is evidence, never the verdict.
 </step>
 
 <step n="4">
@@ -36,13 +48,8 @@ Flag, do not propose fixes.
 </step>
 
 <step n="6">
-Output using assets/phase-audit-template.md. Write to docs/audits/{prerequisite-sprint-id}.md
-(e.g., `docs/audits/FC.0.md` when the phase's first read-only sprint is FC.0).
-
-The audit is named for the sprint that authors it, typically the phase's first
-read-only sprint. The general pattern is `docs/audits/{phase}.0.md` (e.g.
-`docs/audits/FC.0.md` for Phase III.C, `docs/audits/V.A.0.md` for Phase V.A).
-There is no separate phase-level audit artifact — the prerequisite sprint IS the audit.
+Output using assets/phase-audit-template.md. Write to the phase audit path —
+see references/path_conventions.md (audit naming).
 </step>
 
 ## Success Criteria

@@ -66,7 +66,7 @@ This skill has restricted write authority over state files in phase_review mode 
 AUTO-APPLY (no user approval required):
 - Append to docs/ACCEPTED_PARTIALS.md
 - Append to docs/TECHNICAL_DEBT.md
-- Flip friction status SCHEDULED → RESOLVED for current phase frictions
+- Flip friction status OPEN/SCHEDULED → RESOLVED for frictions this phase resolved
 
 PROPOSE-DIFF (user approval required):
 - docs/ROADMAP.md
