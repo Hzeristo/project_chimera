@@ -3,7 +3,7 @@
 **Scope:** Read-only audit prerequisite for batch_planning of Phase {X.Y}.
 **Output location:** `docs/audits/{prerequisite-sprint-id}.md` (e.g., `docs/audits/IV.A.0.md` — named for the sprint that authors it).
 **Date:** YYYY-MM-DD
-**Mode:** Read-only — no fix proposals, no code modifications.
+**Mode:** Read-only **w.r.t. source** — no fix proposals, no code modifications. The one write is this audit report (see Output location); audits are usually pre-sprint.
 
 ---
 

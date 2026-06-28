@@ -14,12 +14,8 @@ Three folders answer three different questions. None substitutes for another.
 |---|---|---|
 | `docs/phases/phase-{X.Y}.md` | what to do | INTENT (sparse manifest) |
 | `docs/sprints/phase-{X.Y}/{sprint-id}.md` | what was done | EXECUTION record |
-| `docs/audits/{prereq-sprint-id}.md` | right or wrong | VERDICT |
+| `docs/audits/{prereq-sprint-id}.md` | right or wrong | EVIDENCE — usually the pre-sprint prerequisite audit; exceptions exist (review / debt) |
 | `docs/plans/Phase-{X.Y}-batch.md` | how (derived from the audit) | PLAN |
-
-Audits are usually **pre-sprint** — the read-only prerequisite that planning
-builds on. Exceptions exist: `audits/` also holds post-hoc and topic audits
-(e.g. a debt-week or perf audit run after the fact).
 
 ## Read / write authority
 
@@ -36,15 +32,15 @@ files (ROADMAP / ACCEPTED_PARTIALS / TECHNICAL_DEBT / friction logs) follow
 chimera-sprint-discipline's own `state_write_authority`, not this table.
 
 ## Autonomy
-These folders are skill **outputs**, written autonomously — no per-write human
-approval: batch_planning writes `plans/`, batch_execution writes `sprints/`,
-phase_audit saves to `audits/`. The one human-authored **input** is `phases/`
-(intent) — skills read it, only humans write it. State files are the separate,
-partially-gated case (see `state_write_authority`).
+Each skill writes its own output artifact **autonomously** — no per-write
+approval, because the artifact IS the deliverable: batch_planning → `plans/`,
+batch_execution → `sprints/`, phase_audit → `audits/`. `phases/` is the
+exception — human-authored intent, only humans write it. Decision-bearing state
+edits (ROADMAP, friction reclassification) still propose-diff.
 
 ## Why the separation matters
-The workflows depend on these staying distinct: planning reads the audit
-**verdict**, not the phase intent; review reconstructs history from the
+The workflows depend on these staying distinct: planning reads the audit (the
+**evidence** base), not the phase intent; review reconstructs history from the
 **execution** record, not the plan. Conflating them — e.g. treating the phase
 doc as the execution record — makes a review claim things happened that were only
 ever proposed.

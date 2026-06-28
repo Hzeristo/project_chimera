@@ -53,14 +53,17 @@ selected mode, follow the recommendation procedure BEFORE any other work
 </invocation_modes>
 
 <state_write_authority>
-This skill has restricted write authority over state files in phase_review mode only:
+Each mode autonomously writes its OWN output artifact — no per-write approval,
+because that artifact IS the deliverable. Outside its own artifact (and, in
+phase_review, the state files below) every mode is read-only.
 
-AUTO-APPLY (no user approval required):
-- Append to docs/ACCEPTED_PARTIALS.md
-- Append to docs/TECHNICAL_DEBT.md
-- Flip friction status OPEN/SCHEDULED → RESOLVED for frictions this phase resolved
+AUTONOMOUS OUTPUT WRITES (no approval):
+- phase_audit    → docs/audits/{prerequisite-sprint-id}.md  (the audit report — usually pre-sprint; exceptions exist)
+- batch_planning → docs/plans/Phase-{X.Y}-batch.md          (the batch plan)
+- phase_review   → append docs/ACCEPTED_PARTIALS.md, docs/TECHNICAL_DEBT.md;
+                   flip friction status OPEN/SCHEDULED → RESOLVED for frictions this phase resolved
 
-PROPOSE-DIFF (user approval required):
+PROPOSE-DIFF (user approval required, phase_review):
 - docs/ROADMAP.md
 - friction-*.md status changes outside phase-resolution
 - Any conflicting modifications to existing entries
@@ -70,11 +73,10 @@ NEVER WRITE in any mode:
 - Skill files themselves
 - Source code (handed to chimera-code-taste)
 - Architecture docs (chimera-code-taste only, in sprint scope)
-- docs/phases/* (user-authored phase intent)
+- docs/phases/* (human-authored phase intent — only humans write intent)
 - docs/sprints/* (execution record — chimera-code-taste owns it)
 
-This authority exists ONLY in phase_review mode. phase_audit and
-batch_planning modes remain read-only as before.
+Full folder R/W table: ../_shared/doc_folders.md.
 </state_write_authority>
 
 <doc_folders>

@@ -51,8 +51,9 @@ do not treat one as a substitute for another:
 - `docs/sprints/phase-{X.Y}/{sprint-id}.md` — **execution** ("what was done"):
   per-sprint summary written by `chimera-code-taste` at each commit. The
   batch-history source of truth for phase review.
-- `docs/audits/{prereq-sprint-id}.md` — **verdict** ("right or wrong"): the
-  pre-phase audit + review evidence, written by `chimera-sprint-discipline`.
+- `docs/audits/{prereq-sprint-id}.md` — **evidence** ("right or wrong"): usually
+  the pre-sprint prerequisite audit that drives planning; sometimes review/debt
+  evidence (exceptions exist). Written by `chimera-sprint-discipline`.
 - `docs/plans/Phase-{X.Y}-batch.md` — the batch plan derived from the audit
   (capital-P; written by `chimera-sprint-discipline` batch_planning).
 
