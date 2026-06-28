@@ -1041,7 +1041,7 @@
   }
 
   function logPersonaShift(personaName: string) {
-    console.log(`%c[SYSTEM] Neural link shifted to: ${personaName}`, 'color: #bb9af7; font-weight: 700;');
+    console.log(`%c[SYSTEM] Neural link shifted to: ${personaName}`, 'color: #8aa4b8; font-weight: 700;');
   }
 
   async function loadPersonas() {

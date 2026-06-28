@@ -1,113 +1,121 @@
 @import url('https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500&family=Inter:wght@400;500;600&family=JetBrains+Mono:ital,wght@0,400;0,500;0,600;1,400&display=swap');
 
 /*────────────────────────────────────────
-  Astrocyte 设计 Token — Sprint 1（与 docs/Astrocyte_UI_Style_Consistency_Report 对齐）
+  Astrocyte 设计 Token — Swiss Steel Blue
+  紫色(187,154,247) → 钢灰蓝(138,164,184)
 ────────────────────────────────────────*/
 :root {
   color-scheme: dark;
 
   /* 主色 */
-  --astrocyte-neural-purple: #bb9af7;
+  --astrocyte-neural-purple: #8aa4b8;       /* 钢灰蓝替换紫 */
   --astrocyte-purple-glow: var(--astrocyte-purple-a-30);
   --astrocyte-purple-subtle: var(--astrocyte-purple-a-10);
   --astrocyte-purple-border: var(--astrocyte-purple-a-30);
-  /* 紫色 α 阶梯：对应 rgba(187, 154, 247, n) */
-  --astrocyte-purple-a-95: rgba(187, 154, 247, 0.95);
-  --astrocyte-purple-a-92: rgba(187, 154, 247, 0.92);
-  --astrocyte-purple-a-90: rgba(187, 154, 247, 0.9);
-  --astrocyte-purple-a-86: rgba(187, 154, 247, 0.86);
-  --astrocyte-purple-a-85: rgba(187, 154, 247, 0.85);
-  --astrocyte-purple-a-82: rgba(187, 154, 247, 0.82);
-  --astrocyte-purple-a-80: rgba(187, 154, 247, 0.8);
-  --astrocyte-purple-a-78: rgba(187, 154, 247, 0.78);
-  --astrocyte-purple-a-75: rgba(187, 154, 247, 0.75);
-  --astrocyte-purple-a-72: rgba(187, 154, 247, 0.72);
-  --astrocyte-purple-a-66: rgba(187, 154, 247, 0.66);
-  --astrocyte-purple-a-65: rgba(187, 154, 247, 0.65);
-  --astrocyte-purple-a-60: rgba(187, 154, 247, 0.6);
-  --astrocyte-purple-a-56: rgba(187, 154, 247, 0.56);
-  --astrocyte-purple-a-55: rgba(187, 154, 247, 0.55);
-  --astrocyte-purple-a-52: rgba(187, 154, 247, 0.52);
-  --astrocyte-purple-a-50: rgba(187, 154, 247, 0.5);
-  --astrocyte-purple-a-45: rgba(187, 154, 247, 0.45);
-  --astrocyte-purple-a-42: rgba(187, 154, 247, 0.42);
-  --astrocyte-purple-a-40: rgba(187, 154, 247, 0.4);
-  --astrocyte-purple-a-35: rgba(187, 154, 247, 0.35);
-  --astrocyte-purple-a-32: rgba(187, 154, 247, 0.32);
-  --astrocyte-purple-a-30: rgba(187, 154, 247, 0.3);
-  --astrocyte-purple-a-28: rgba(187, 154, 247, 0.28);
-  --astrocyte-purple-a-25: rgba(187, 154, 247, 0.25);
-  --astrocyte-purple-a-22: rgba(187, 154, 247, 0.22);
-  --astrocyte-purple-a-20: rgba(187, 154, 247, 0.2);
-  --astrocyte-purple-a-16: rgba(187, 154, 247, 0.16);
-  --astrocyte-purple-a-15: rgba(187, 154, 247, 0.15);
-  --astrocyte-purple-a-12: rgba(187, 154, 247, 0.12);
-  --astrocyte-purple-a-10: rgba(187, 154, 247, 0.1);
-  --astrocyte-purple-a-08: rgba(187, 154, 247, 0.08);
-  --astrocyte-purple-a-06: rgba(187, 154, 247, 0.06);
-  --astrocyte-purple-a-05: rgba(187, 154, 247, 0.05);
-  --astrocyte-purple-a-04: rgba(187, 154, 247, 0.04);
 
-  /* 第二 accent（矿工进度条等） */
-  --astrocyte-accent-cyan: #22d3ee;
-  --astrocyte-accent-violet: #7c3aed;
+  /* α 阶梯:全部 (187, 154, 247, n) → (138, 164, 184, n) */
+  --astrocyte-purple-a-95: rgba(138, 164, 184, 0.95);
+  --astrocyte-purple-a-92: rgba(138, 164, 184, 0.92);
+  --astrocyte-purple-a-90: rgba(138, 164, 184, 0.9);
+  --astrocyte-purple-a-86: rgba(138, 164, 184, 0.86);
+  --astrocyte-purple-a-85: rgba(138, 164, 184, 0.85);
+  --astrocyte-purple-a-82: rgba(138, 164, 184, 0.82);
+  --astrocyte-purple-a-80: rgba(138, 164, 184, 0.8);
+  --astrocyte-purple-a-78: rgba(138, 164, 184, 0.78);
+  --astrocyte-purple-a-75: rgba(138, 164, 184, 0.75);
+  --astrocyte-purple-a-72: rgba(138, 164, 184, 0.72);
+  --astrocyte-purple-a-66: rgba(138, 164, 184, 0.66);
+  --astrocyte-purple-a-65: rgba(138, 164, 184, 0.65);
+  --astrocyte-purple-a-60: rgba(138, 164, 184, 0.6);
+  --astrocyte-purple-a-56: rgba(138, 164, 184, 0.56);
+  --astrocyte-purple-a-55: rgba(138, 164, 184, 0.55);
+  --astrocyte-purple-a-52: rgba(138, 164, 184, 0.52);
+  --astrocyte-purple-a-50: rgba(138, 164, 184, 0.5);
+  --astrocyte-purple-a-45: rgba(138, 164, 184, 0.45);
+  --astrocyte-purple-a-42: rgba(138, 164, 184, 0.42);
+  --astrocyte-purple-a-40: rgba(138, 164, 184, 0.4);
+  --astrocyte-purple-a-35: rgba(138, 164, 184, 0.35);
+  --astrocyte-purple-a-32: rgba(138, 164, 184, 0.32);
+  --astrocyte-purple-a-30: rgba(138, 164, 184, 0.3);
+  --astrocyte-purple-a-28: rgba(138, 164, 184, 0.28);
+  --astrocyte-purple-a-25: rgba(138, 164, 184, 0.25);
+  --astrocyte-purple-a-22: rgba(138, 164, 184, 0.22);
+  --astrocyte-purple-a-20: rgba(138, 164, 184, 0.2);
+  --astrocyte-purple-a-16: rgba(138, 164, 184, 0.16);
+  --astrocyte-purple-a-15: rgba(138, 164, 184, 0.15);
+  --astrocyte-purple-a-12: rgba(138, 164, 184, 0.12);
+  --astrocyte-purple-a-10: rgba(138, 164, 184, 0.1);
+  --astrocyte-purple-a-08: rgba(138, 164, 184, 0.08);
+  --astrocyte-purple-a-06: rgba(138, 164, 184, 0.06);
+  --astrocyte-purple-a-05: rgba(138, 164, 184, 0.05);
+  --astrocyte-purple-a-04: rgba(138, 164, 184, 0.04);
 
-  /* 背景层级 */
-  --surface-0: rgba(10, 10, 15, 1);
-  --surface-1: rgba(15, 15, 20, 0.95);
-  --surface-2: rgba(20, 18, 30, 0.95);
-  --surface-3: rgba(22, 20, 32, 0.85);
-  --surface-body: rgba(15, 15, 20, 0.8);
+  /* 第二 accent —— 改成更克制的"钢蓝渐变" */
+  /* 原: cyan #22d3ee + violet #7c3aed (太鲜艳) */
+  /* 新: 浅蓝灰 + 深钢蓝,渐变低饱和 */
+  --astrocyte-accent-cyan: #b8c8d4;         /* 进度条亮端 */
+  --astrocyte-accent-violet: #4a6278;       /* 进度条暗端 */
+
+  /* 背景层级 —— 中性灰,去紫色调 */
+  /* 原 surface 全部带 (10,10,15) / (20,18,30) 这种偏紫的暗色 */
+  /* 新 surface 改成纯中性灰 (12,14,18) 系 */
+  --surface-0: rgba(10, 12, 16, 1);
+  --surface-1: rgba(14, 16, 20, 0.95);
+  --surface-2: rgba(18, 20, 26, 0.95);
+  --surface-3: rgba(20, 22, 28, 0.85);
+  --surface-body: rgba(14, 16, 20, 0.8);
   --surface-absolute-black: #000000;
-  --surface-inset: rgba(12, 10, 18, 0.95);
-  --surface-inset-soft: rgba(12, 10, 18, 0.6);
-  --surface-skill-tile: rgba(30, 27, 40, 0.4);
-  --surface-skill-tile-hover: rgba(30, 27, 40, 0.6);
-  --surface-chrome-88: rgba(10, 10, 15, 0.88);
-  --surface-chrome-92: rgba(10, 10, 15, 0.92);
-  --surface-code: #050505;
+  --surface-inset: rgba(10, 12, 16, 0.95);
+  --surface-inset-soft: rgba(10, 12, 16, 0.6);
+  --surface-skill-tile: rgba(26, 30, 38, 0.4);
+  --surface-skill-tile-hover: rgba(26, 30, 38, 0.6);
+  --surface-chrome-88: rgba(10, 12, 16, 0.88);
+  --surface-chrome-92: rgba(10, 12, 16, 0.92);
+  --surface-code: #050608;
   /* 设置/模态（略浅于 panel） */
-  --surface-modal: rgba(8, 8, 12, 0.94);
-  --surface-modal-inner: rgba(8, 8, 12, 0.92);
+  --surface-modal: rgba(8, 10, 14, 0.94);
+  --surface-modal-inner: rgba(8, 10, 14, 0.92);
   /* 档案态横幅等 */
-  --surface-archive: rgba(6, 6, 10, 0.95);
+  --surface-archive: rgba(6, 8, 12, 0.95);
   /* 设置表单项行底等 */
-  --surface-row-muted: rgba(12, 12, 20, 0.92);
+  --surface-row-muted: rgba(10, 12, 18, 0.92);
   /* 模态遮罩、嵌套暗区、毛玻璃/浮层、侧栏（字面 rgba 收拢至此） */
   --surface-scrim: rgba(0, 0, 0, 0.55);
   --surface-embed: rgba(0, 0, 0, 0.38);
   --surface-embed-deep: rgba(0, 0, 0, 0.34);
   --surface-input-dim: rgba(0, 0, 0, 0.5);
-  --surface-sidebar: rgba(15, 12, 22, 0.65);
-  --surface-floating: rgba(15, 12, 22, 0.85);
-  --surface-tile-90: rgba(8, 8, 12, 0.9);
-  --surface-card-frost: rgba(20, 20, 25, 0.4);
+  --surface-sidebar: rgba(12, 14, 20, 0.65);
+  --surface-floating: rgba(12, 14, 20, 0.85);
+  --surface-tile-90: rgba(8, 10, 14, 0.9);
+  --surface-card-frost: rgba(18, 20, 24, 0.4);
   --surface-scrollbar-track: rgba(0, 0, 0, 0.25);
   --surface-bright: #ffffff;
-  --surface-progress-track: rgba(30, 41, 59, 0.9);
-  /* 设置里 Provider 连接指示 LED */
-  --status-led-mute: rgba(100, 100, 108, 0.55);
-  --status-led-mute-dim: rgba(88, 88, 96, 0.5);
-  --status-led-probe: rgba(160, 162, 170, 0.95);
-  --status-led-off: #4a2060;
-  /* 时间轴等危险操作轻衬 */
-  --surface-danger-surface: rgba(255, 107, 107, 0.15);
+  --surface-progress-track: rgba(30, 38, 50, 0.9);
 
-  /* 边框 */
-  --border-hud: rgba(100, 90, 130, 0.3);
-  --border-hud-emphasis: rgba(100, 90, 130, 0.35);
-  --border-muted: rgba(100, 90, 130, 0.2);
+  /* LED / 状态 —— 保持中性,不带蓝 */
+  --status-led-mute: rgba(100, 104, 110, 0.55);
+  --status-led-mute-dim: rgba(88, 90, 96, 0.5);
+  --status-led-probe: rgba(160, 165, 172, 0.95);
+  --status-led-off: #2a3a4a;                  /* 原 #4a2060(紫) → 深钢蓝 */
+
+  /* 危险态 —— 略调,在新色调下更协调 */
+  --surface-danger-surface: rgba(220, 80, 80, 0.15);
+
+  /* 边框 —— 钢蓝灰 */
+  --border-hud: rgba(120, 132, 148, 0.3);
+  --border-hud-emphasis: rgba(120, 132, 148, 0.35);
+  --border-muted: rgba(120, 132, 148, 0.2);
   --border-active: var(--astrocyte-neural-purple);
-  --border-neutral: #333333;
-  --border-scrollbar: rgba(51, 51, 51, 0.9);
+  --border-neutral: #2a3038;
+  --border-scrollbar: rgba(42, 48, 56, 0.9);
 
-  /* 语义 */
-  --feedback-good: #8ef1b6;
-  --feedback-bad: #ff8fa3;
-  --error: #dc2626;
-  --error-surface: rgba(220, 38, 38, 0.1);
-  --error-fg: #fecaca;
-  --warning: #f59e0b;
+  /* 语义色 —— 国际主义风格压低饱和 */
+  --feedback-good: #7ac8a0;                   /* 原 #8ef1b6 → 略低饱和 */
+  --feedback-bad: #d4818d;                    /* 原 #ff8fa3 → 略低饱和 */
+  --error: #c83030;                           /* 原 #dc2626 → 略压 */
+  --error-surface: rgba(200, 48, 48, 0.1);
+  --error-fg: #f0c0c0;
+  --warning: #d49830;                         /* 原 #f59e0b → 略压 */
 
   /* 间距：4px 基准 */
   --space-1: 4px;
