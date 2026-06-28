@@ -30,24 +30,14 @@ HARD STOP if any are missing. Output diagnosis, do not proceed.
 
 <expected_model>
 This skill operates in three modes with different reasoning intensity.
+Recommendation procedure (detect → inform → wait, never auto-switch):
+see ../_shared/expected_model.md.
 
 | Mode | Recommended | Acceptable | Wasteful |
 |---|---|---|---|
 | phase_audit | Opus | Sonnet | Haiku (insufficient) |
 | batch_planning | Opus | Sonnet (if audit recent) | Haiku (insufficient) |
 | phase_review | Opus (phase seal) | Sonnet (mid-batch only) | Haiku (insufficient) |
-
-On activation, if current model is detected as wasteful or higher-than-needed:
-  Output before any other work:
-
-    Model recommendation: this mode is best on {recommended}.
-    Current model: {detected}.
-    Switch with /model and restart this request, OR confirm to continue
-    with {detected} acknowledging cost/quality trade-off.
-
-  Wait for explicit user confirmation before proceeding.
-
-Do NOT auto-switch (skill cannot invoke /model). Only inform.
 </expected_model>
 
 <invocation_modes>
@@ -84,7 +74,10 @@ batch_planning modes remain read-only as before.
 </state_write_authority>
 
 <subagent_routing>
-Spawn subagents (Agent tool, general-purpose, model: Haiku) for:
+Generic delegation policy (Haiku for scans, structured returns, prose is never
+the verdict): see ../_shared/subagent_routing.md. Skill-specific:
+
+Spawn subagents (Haiku) for:
 - Repo-wide pattern scans (Select-String / Grep across many files)
 - Migration drift detection (broken imports, missing files)
 - Test/lint output parsing
@@ -93,8 +86,6 @@ Do NOT spawn subagent for:
 - Reasoning across audit findings
 - Planning decisions
 - Phase review verdicts
-
-Subagents return structured summaries, never verbatim file contents.
 </subagent_routing>
 
 <core_principles>
@@ -106,60 +97,17 @@ Subagents return structured summaries, never verbatim file contents.
 </core_principles>
 
 <execution_environment>
-<!-- SYNC: duplicated in chimera-code-taste, manual sync needed -->
-Project Chimera development host: Windows.
-Tool invocations use the PowerShell tool (pwsh 7+), NOT Bash.
-
-PowerShell-native idioms to use:
-  - File listing: Get-ChildItem path/ -Recurse -Filter *.py
-  - Existence check: Test-Path path/
-  - Pattern search: Select-String -Path 'path/*.py' -Pattern 'foo' -Recurse
-  - File content: Get-Content path/file.md
-  - Append to file: "text" | Out-File -Append -Encoding utf8 path/file.md
-  - Remove file: Remove-Item path/file.md -Force
-  - Conditional: $x ? "yes" : "no" (pwsh 7+ ternary)
-  - Null coalescing: $x ?? "default" (pwsh 7+)
-
-Cross-platform commands that work as-is:
-  - git log/diff/status/show/add/commit
-  - python -m pytest/ruff/mypy
-  - cargo test/build
-  - npm run check / pnpm check
-
-Do NOT use Unix-only syntax:
-  - find (use Get-ChildItem -Recurse)
-  - grep (use Select-String)
-  - rm (use Remove-Item)
-  - cat (use Get-Content — alias exists but not in tool globs)
-  - test -f (use Test-Path)
-  - echo "x" >> file (use Out-File -Append)
-  - [ -d path ] (use Test-Path -PathType Container)
-  - wc -l (use (Get-Content file).Count)
-
-Construct correct syntax on first attempt. No POSIX-then-retry pattern.
+Host is Windows — use the PowerShell tool (pwsh 7+), NOT Bash. Full idiom list
+and forbidden POSIX syntax: see ../_shared/execution_environment.md (single
+source shared with chimera-code-taste).
 </execution_environment>
 
 <incident_protocol>
-<!-- SYNC: duplicated in chimera-code-taste, manual sync needed -->
-An incident is a clear-cut code defect (regression, crash, parse failure)
-that is immediately diagnosable and fixable. It is NOT a friction (workflow
-pain) nor tracked debt (known deferred work).
-
-Incident handling bypasses phase/sprint machinery:
-1. Reproduce + locate root cause (cite file:line)
-2. Apply minimal hotfix
-3. Run the specific test/smoke that reproduces it; add a regression test
-4. Commit as: fix({scope}): {one-line} — hotfix, no sprint
-5. Log to docs/incidents/{YYYY-MM-DD}-{slug}.md: root cause + fix, 2 lines
-
-Do NOT:
-- Log incidents to FRICTION_LOG (pollutes workflow-pain signal)
-- Defer incidents to debt week (they need immediate fix)
-- Run full audit/plan cycle (root cause is already known)
-
-Escalation: if the SAME class of incident recurs ≥3 times, promote it to a
-FRICTION entry — recurrence indicates a workflow/architecture problem, not
-an isolated bug.
+Incidents (clear-cut code defects: regression, crash, parse failure) bypass
+phase/sprint machinery — reproduce + root-cause, minimal hotfix, regression
+test, commit `fix({scope}): …`, log to docs/incidents/. Full protocol (incl.
+the ≥3-recurrence → FRICTION escalation): see ../_shared/incident_protocol.md
+(single source shared with chimera-code-taste).
 </incident_protocol>
 
 <rules_summary>
